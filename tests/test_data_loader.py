@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from data_loader import (
+from market_risk_baseline.data_loader import (
     MarketDataError,
     _extract_adjusted_close,
     clean_adjusted_prices,
@@ -58,4 +58,3 @@ def test_clean_prices_reports_invalid_ticker_and_insufficient_history() -> None:
     short = pd.DataFrame({"AAA": [1, 2, 3], "BBB": [2, 3, 4]}, index=dates[:3])
     with pytest.raises(MarketDataError, match="Insufficient common price history"):
         clean_adjusted_prices(short, ["AAA", "BBB"], rolling_window=2)
-

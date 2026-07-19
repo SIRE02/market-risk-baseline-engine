@@ -4,7 +4,7 @@ A Python pipeline that downloads adjusted daily prices and produces simple retur
 
 ## What it produces
 
-Running `main.py` creates these files in `outputs/`:
+Running the installed `market-risk-baseline` command creates these files in `outputs/`:
 
 - `adjusted_prices.csv`
 - `simple_returns.csv`
@@ -25,17 +25,20 @@ The environment is named `market-risk-baseline-engine`:
 ```powershell
 conda env create -f environment.yml
 conda activate market-risk-baseline-engine
+python -m pip install -e .
 ```
 
 If the environment already exists, synchronize it with:
 
 ```powershell
 conda env update -n market-risk-baseline-engine -f environment.yml --prune
+python -m pip install -e .
 ```
 
 ## Configure and run
 
-Edit the configuration block at the top of `main.py`:
+For version `0.1.1`, edit the temporary configuration block in
+`src/market_risk_baseline/cli.py`:
 
 ```python
 TICKERS = ["SPY", "QQQ", "TLT", "GLD"]
@@ -48,14 +51,16 @@ TRADING_DAYS = 252
 Then run the single entry point:
 
 ```powershell
-conda run -n market-risk-baseline-engine python main.py
+conda run -n market-risk-baseline-engine market-risk-baseline
 ```
 
 Yahoo Finance treats `END_DATE` as exclusive. For example, `2025-01-01` requests observations strictly before January 1, 2025.
 
 ## Tests
 
-The automated tests use deterministic synthetic prices and do not require network access:
+The automated tests use deterministic synthetic prices and do not require network access.
+They include a wheel build, isolated-target installation, package import, entry-point check,
+and an offline complete-analysis test:
 
 ```powershell
 conda run -n market-risk-baseline-engine python -m pytest -q

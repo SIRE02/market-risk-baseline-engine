@@ -6,9 +6,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from correlation import align_returns, correlation_matrix, extreme_correlation_pairs
-from returns import calculate_log_returns, calculate_simple_returns
-from risk_metrics import rolling_volatility, volatility_summary
+from market_risk_baseline.correlation import (
+    align_returns,
+    correlation_matrix,
+    extreme_correlation_pairs,
+)
+from market_risk_baseline.returns import calculate_log_returns, calculate_simple_returns
+from market_risk_baseline.risk_metrics import rolling_volatility, volatility_summary
 
 
 @pytest.fixture
@@ -76,4 +80,3 @@ def test_invalid_prices_and_empty_alignment_raise_clear_errors() -> None:
     empty_alignment = pd.DataFrame({"AAA": [0.1, np.nan], "BBB": [np.nan, 0.2]})
     with pytest.raises(ValueError, match="empty"):
         align_returns(empty_alignment)
-

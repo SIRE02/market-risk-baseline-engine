@@ -1,8 +1,10 @@
 """Vectorized simple-return and logarithmic-return calculations."""
 
 from __future__ import annotations
+
 import numpy as np
 import pandas as pd
+
 
 def _validate_prices(prices: pd.DataFrame) -> None:
     if prices.empty:

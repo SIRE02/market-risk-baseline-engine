@@ -1,14 +1,23 @@
-"""Single entry point for the Quantitative Market Baseline Engine."""
+"""Command-line entry point for the Market Risk Baseline Engine."""
 
 from __future__ import annotations
-from pathlib import Path
-from correlation import correlation_matrix, extreme_correlation_pairs
-from data_loader import MarketDataError, download_adjusted_prices
-from returns import calculate_log_returns, calculate_simple_returns, summarize_returns
-from risk_metrics import rolling_volatility, volatility_summary
-from visualizations import plot_correlation_heatmap, plot_rolling_volatility
 
-# Change the entire analysis universe and horizon in this one configuration section.
+from pathlib import Path
+
+from market_risk_baseline.correlation import correlation_matrix, extreme_correlation_pairs
+from market_risk_baseline.data_loader import MarketDataError, download_adjusted_prices
+from market_risk_baseline.returns import (
+    calculate_log_returns,
+    calculate_simple_returns,
+    summarize_returns,
+)
+from market_risk_baseline.risk_metrics import rolling_volatility, volatility_summary
+from market_risk_baseline.visualizations import (
+    plot_correlation_heatmap,
+    plot_rolling_volatility,
+)
+
+# Phase 2 release 0.1.2 will replace these editable defaults with validated CLI/config input.
 TICKERS = ["SPY", "QQQ", "TLT", "GLD"]
 START_DATE = "2020-01-01"
 END_DATE = "2025-01-01"
@@ -51,8 +60,13 @@ def run_analysis() -> None:
     print(f"\nSaved tables and charts to: {OUTPUT_DIR.resolve()}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the CLI and convert expected analysis failures into a concise exit message."""
     try:
         run_analysis()
     except (MarketDataError, ValueError) as exc:
         raise SystemExit(f"Analysis failed: {exc}") from exc
+
+
+if __name__ == "__main__":
+    main()

@@ -1,8 +1,10 @@
 """Download and clean adjusted daily market prices."""
 
 from __future__ import annotations
+
 from collections.abc import Sequence
 from datetime import date
+
 import pandas as pd
 import yfinance as yf
 
@@ -86,7 +88,9 @@ def clean_adjusted_prices(
     prices = prices.apply(pd.to_numeric, errors="coerce")
 
     missing_tickers = [ticker for ticker in tickers if ticker not in prices.columns]
-    empty_tickers = [ticker for ticker in tickers if ticker in prices and prices[ticker].dropna().empty]
+    empty_tickers = [
+        ticker for ticker in tickers if ticker in prices and prices[ticker].dropna().empty
+    ]
     unusable = missing_tickers + empty_tickers
     if unusable:
         symbols = ", ".join(dict.fromkeys(unusable))
