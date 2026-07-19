@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.idea/
+
+# Generated files
+outputs/
+tmp/
+
+# Local documentation
+docs/
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+
