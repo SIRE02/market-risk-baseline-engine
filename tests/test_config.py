@@ -22,6 +22,9 @@ def test_json_configuration_is_normalized_and_overridden(tmp_path: Path) -> None
                 "rolling_window": 20,
                 "rolling_min_observations": 4,
                 "observations_per_year": 260,
+                "quantiles": [0.9, 0.1, 0.1],
+                "quantile_method": "nearest",
+                "downside_target": -0.001,
             }
         ),
         encoding="utf-8",
@@ -31,6 +34,9 @@ def test_json_configuration_is_normalized_and_overridden(tmp_path: Path) -> None
     assert config.rolling_window == 5
     assert config.rolling_min_observations == 4
     assert config.observations_per_year == 260
+    assert config.quantiles == (0.1, 0.9)
+    assert config.quantile_method == "nearest"
+    assert config.downside_target == pytest.approx(-0.001)
 
 
 def test_csv_configuration_requires_an_existing_source(tmp_path: Path) -> None:
@@ -63,9 +69,18 @@ def test_unknown_options_and_invalid_core_values_fail_early(tmp_path: Path) -> N
             rolling_window=5,
             rolling_min_observations=6,
         )
+    with pytest.raises(ValueError, match="strictly between 0 and 1"):
+        AnalysisConfig(tickers=("AAA", "BBB"), quantiles=(0.0, 0.95))
+    with pytest.raises(ValueError, match="QUANTILE_METHOD"):
+        AnalysisConfig(tickers=("AAA", "BBB"), quantile_method="unknown")
+    with pytest.raises(ValueError, match="DOWNSIDE_TARGET"):
+        AnalysisConfig(tickers=("AAA", "BBB"), downside_target=float("nan"))
 
 
 def test_rolling_minimum_defaults_to_full_window() -> None:
     config = AnalysisConfig(tickers=("AAA", "BBB"), rolling_window=7)
     assert config.rolling_min_observations == 7
     assert config.observations_per_year == 252
+    assert config.quantiles == (0.05, 0.25, 0.75, 0.95)
+    assert config.quantile_method == "linear"
+    assert config.downside_target == 0.0

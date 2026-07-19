@@ -41,7 +41,7 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
         capture_output=True,
         text=True,
     )
-    wheels = list(wheel_directory.glob("market_risk_baseline_engine-0.1.3-*.whl"))
+    wheels = list(wheel_directory.glob("market_risk_baseline_engine-0.1.4-*.whl"))
     assert len(wheels) == 1
 
     subprocess.run(
@@ -73,7 +73,7 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
                 "dist = distribution('market-risk-baseline-engine'); "
                 "entry_point = next(ep for ep in dist.entry_points "
                 "if ep.group == 'console_scripts' and ep.name == 'market-risk-baseline'); "
-                "assert market_risk_baseline.__version__ == dist.version == '0.1.3'; "
+                "assert market_risk_baseline.__version__ == dist.version == '0.1.4'; "
                 "assert callable(entry_point.load())"
             ),
         ],

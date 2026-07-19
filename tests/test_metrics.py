@@ -11,7 +11,11 @@ from market_risk_baseline.correlation import (
     correlation_matrix,
     extreme_correlation_pairs,
 )
-from market_risk_baseline.returns import calculate_log_returns, calculate_simple_returns
+from market_risk_baseline.returns import (
+    calculate_log_returns,
+    calculate_simple_returns,
+    summarize_returns,
+)
 from market_risk_baseline.risk_metrics import rolling_volatility, volatility_summary
 
 
@@ -37,6 +41,45 @@ def test_return_calculations_are_vectorized_and_finite(prices: pd.DataFrame) -> 
     assert log.iloc[0, 0] == pytest.approx(np.log(1.02))
     assert np.isfinite(simple.to_numpy()).all()
     assert np.isfinite(log.to_numpy()).all()
+
+
+def test_return_distribution_statistics_match_hand_calculated_fixture() -> None:
+    returns = pd.DataFrame({"AAA": [-0.01, 0.0, 0.01, 0.02, 0.03]})
+
+    summary = summarize_returns(
+        returns,
+        quantiles=(0.25, 0.75),
+        quantile_method="linear",
+        downside_target=0.01,
+    ).loc["AAA"]
+
+    assert summary["median_return"] == pytest.approx(0.01)
+    assert summary["quantile_0.25"] == pytest.approx(0.0)
+    assert summary["quantile_0.75"] == pytest.approx(0.02)
+    assert summary["sample_skewness"] == pytest.approx(0.0, abs=1e-15)
+    assert summary["sample_excess_kurtosis"] == pytest.approx(-1.2)
+    # sqrt(((-0.02)^2 + (-0.01)^2) / 5) = 0.01
+    assert summary["downside_deviation"] == pytest.approx(0.01)
+
+    asymmetric = summarize_returns(
+        pd.DataFrame({"AAA": [0.0, 0.0, 0.0, 1.0]}), quantiles=(0.5,)
+    ).loc["AAA"]
+    assert asymmetric["sample_skewness"] == pytest.approx(2.0)
+    assert asymmetric["sample_excess_kurtosis"] == pytest.approx(4.0)
+
+
+def test_quantile_interpolation_method_is_applied_and_validated() -> None:
+    returns = pd.DataFrame({"AAA": [0.0, 1.0, 2.0, 3.0]})
+
+    linear = summarize_returns(returns, quantiles=(0.25,), quantile_method="linear")
+    lower = summarize_returns(returns, quantiles=(0.25,), quantile_method="lower")
+
+    assert linear.loc["AAA", "quantile_0.25"] == pytest.approx(0.75)
+    assert lower.loc["AAA", "quantile_0.25"] == pytest.approx(0.0)
+    with pytest.raises(ValueError, match="QUANTILE_METHOD"):
+        summarize_returns(returns, quantile_method="unsupported")
+    with pytest.raises(ValueError, match="strictly between 0 and 1"):
+        summarize_returns(returns, quantiles=(0.0, 0.5))
 
 
 def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> None:

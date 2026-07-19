@@ -52,6 +52,20 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--rolling-window", type=int)
     parser.add_argument("--rolling-min-observations", type=int)
     parser.add_argument("--observations-per-year", type=int)
+    parser.add_argument(
+        "--quantiles",
+        nargs="+",
+        help="Empirical probabilities separated by spaces (commas are also accepted)",
+    )
+    parser.add_argument(
+        "--quantile-method",
+        choices=("linear", "lower", "higher", "midpoint", "nearest"),
+    )
+    parser.add_argument(
+        "--downside-target",
+        type=float,
+        help="Daily log-return target used by downside deviation",
+    )
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--csv-path", type=Path)
     return parser
@@ -66,6 +80,14 @@ def _configuration_from_args(arguments: argparse.Namespace) -> AnalysisConfig:
             for ticker in item.split(",")
             if ticker.strip()
         ]
+    quantiles: list[str] | None = None
+    if arguments.quantiles is not None:
+        quantiles = [
+            probability
+            for item in arguments.quantiles
+            for probability in item.split(",")
+            if probability.strip()
+        ]
     overrides: dict[str, Any] = {
         "provider": arguments.provider,
         "tickers": tickers,
@@ -74,6 +96,9 @@ def _configuration_from_args(arguments: argparse.Namespace) -> AnalysisConfig:
         "rolling_window": arguments.rolling_window,
         "rolling_min_observations": arguments.rolling_min_observations,
         "observations_per_year": arguments.observations_per_year,
+        "quantiles": quantiles,
+        "quantile_method": arguments.quantile_method,
+        "downside_target": arguments.downside_target,
         "output_dir": arguments.output_dir,
         "csv_path": arguments.csv_path,
     }
@@ -95,7 +120,12 @@ def run_analysis(
     prices = market_data.prices
     simple_returns = calculate_simple_returns(prices)
     log_returns = calculate_log_returns(prices)
-    return_summary = summarize_returns(log_returns)
+    return_summary = summarize_returns(
+        log_returns,
+        config.quantiles,
+        config.quantile_method,
+        config.downside_target,
+    )
     vol_summary = volatility_summary(log_returns, config.observations_per_year)
     rolling = rolling_volatility(
         log_returns,

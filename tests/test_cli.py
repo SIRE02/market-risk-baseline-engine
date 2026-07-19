@@ -94,6 +94,27 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
     assert manifest["estimation_conventions"]["rolling"][
         "future_observations_used"
     ] is False
+    distribution = manifest["estimation_conventions"]["return_distribution"]
+    assert distribution["quantiles"] == [0.05, 0.25, 0.75, 0.95]
+    assert distribution["quantile_method"] == "linear"
+    assert distribution["downside_deviation"] == {
+        "target": 0.0,
+        "target_return_type": "daily_log_return",
+        "denominator": "all_non_missing_observations",
+        "formula": "sqrt(sum(min(return - target, 0)^2) / n)",
+        "annualized": False,
+    }
+    summary = pd.read_csv(output_dir / "return_summary.csv", index_col=0)
+    assert {
+        "median_return",
+        "quantile_0.05",
+        "quantile_0.25",
+        "quantile_0.75",
+        "quantile_0.95",
+        "sample_skewness",
+        "sample_excess_kurtosis",
+        "downside_deviation",
+    }.issubset(summary.columns)
     assert "data_quality_report.json" in manifest["generated_artifacts"]
 
 
@@ -126,6 +147,13 @@ rolling_window = 10
             "3",
             "--observations-per-year",
             "260",
+            "--quantiles",
+            "0.1,0.5",
+            "0.9",
+            "--quantile-method",
+            "nearest",
+            "--downside-target",
+            "-0.001",
             "--output-dir",
             str(tmp_path / "out"),
         ]
@@ -135,6 +163,9 @@ rolling_window = 10
     assert captured[0].rolling_window == 5
     assert captured[0].rolling_min_observations == 3
     assert captured[0].observations_per_year == 260
+    assert captured[0].quantiles == (0.1, 0.5, 0.9)
+    assert captured[0].quantile_method == "nearest"
+    assert captured[0].downside_target == pytest.approx(-0.001)
     assert captured[0].start_date == "2023-01-01"
 
 

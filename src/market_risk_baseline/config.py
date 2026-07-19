@@ -11,10 +11,16 @@ import tomllib
 from typing import Any
 
 from market_risk_baseline.estimation import (
+    DEFAULT_DOWNSIDE_TARGET,
     DEFAULT_OBSERVATIONS_PER_YEAR,
+    DEFAULT_QUANTILES,
+    DEFAULT_QUANTILE_METHOD,
     DEFAULT_ROLLING_WINDOW,
     resolve_rolling_min_observations,
+    validate_finite_number,
     validate_positive_integer,
+    validate_quantile_method,
+    validate_quantiles,
 )
 
 
@@ -26,6 +32,9 @@ DEFAULT_CONFIGURATION: dict[str, Any] = {
     "rolling_window": DEFAULT_ROLLING_WINDOW,
     "rolling_min_observations": None,
     "observations_per_year": DEFAULT_OBSERVATIONS_PER_YEAR,
+    "quantiles": list(DEFAULT_QUANTILES),
+    "quantile_method": DEFAULT_QUANTILE_METHOD,
+    "downside_target": DEFAULT_DOWNSIDE_TARGET,
     "output_dir": "outputs",
     "csv_path": None,
 }
@@ -42,6 +51,9 @@ class AnalysisConfig:
     rolling_window: int = DEFAULT_ROLLING_WINDOW
     rolling_min_observations: int | None = None
     observations_per_year: int = DEFAULT_OBSERVATIONS_PER_YEAR
+    quantiles: tuple[float, ...] = DEFAULT_QUANTILES
+    quantile_method: str = DEFAULT_QUANTILE_METHOD
+    downside_target: float = DEFAULT_DOWNSIDE_TARGET
     output_dir: Path = Path("outputs")
     csv_path: Path | None = None
 
@@ -74,6 +86,11 @@ class AnalysisConfig:
         validate_positive_integer(
             self.observations_per_year, "OBSERVATIONS_PER_YEAR"
         )
+        quantiles = validate_quantiles(self.quantiles)
+        quantile_method = validate_quantile_method(self.quantile_method)
+        downside_target = validate_finite_number(
+            self.downside_target, "DOWNSIDE_TARGET"
+        )
 
         output_dir = Path(self.output_dir).expanduser()
         if not str(output_dir).strip():
@@ -89,6 +106,9 @@ class AnalysisConfig:
 
         object.__setattr__(self, "provider", provider)
         object.__setattr__(self, "tickers", symbols)
+        object.__setattr__(self, "quantiles", quantiles)
+        object.__setattr__(self, "quantile_method", quantile_method)
+        object.__setattr__(self, "downside_target", downside_target)
         object.__setattr__(
             self, "rolling_min_observations", rolling_min_observations
         )
@@ -99,6 +119,7 @@ class AnalysisConfig:
         """Return a JSON-serializable representation."""
         values = asdict(self)
         values["tickers"] = list(self.tickers)
+        values["quantiles"] = list(self.quantiles)
         values["output_dir"] = str(self.output_dir)
         values["csv_path"] = str(self.csv_path) if self.csv_path is not None else None
         return values
@@ -154,6 +175,13 @@ def load_configuration(
         values["tickers"] = tuple(tickers)
     else:
         raise ValueError("TICKERS must be a list or a comma-separated string.")
+    quantiles = values["quantiles"]
+    if isinstance(quantiles, str):
+        values["quantiles"] = tuple(part for part in quantiles.split(","))
+    elif isinstance(quantiles, Sequence):
+        values["quantiles"] = tuple(quantiles)
+    else:
+        raise ValueError("QUANTILES must be a list or a comma-separated string.")
     values["output_dir"] = Path(values["output_dir"])
     if values.get("csv_path") is not None:
         values["csv_path"] = Path(values["csv_path"])

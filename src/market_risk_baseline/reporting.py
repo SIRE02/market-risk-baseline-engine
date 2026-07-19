@@ -56,6 +56,9 @@ def build_run_manifest(
             config.observations_per_year,
             config.rolling_window,
             config.rolling_min_observations,
+            config.quantiles,
+            config.quantile_method,
+            config.downside_target,
         ),
         "data_source": {
             "provider": market_data.payload.provider,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -9,6 +10,12 @@ DEFAULT_OBSERVATIONS_PER_YEAR = 252
 DEFAULT_ROLLING_WINDOW = 21
 SAMPLE_DDOF = 1
 MINIMUM_SAMPLE_OBSERVATIONS = SAMPLE_DDOF + 1
+DEFAULT_QUANTILES = (0.05, 0.25, 0.75, 0.95)
+DEFAULT_QUANTILE_METHOD = "linear"
+SUPPORTED_QUANTILE_METHODS = frozenset(
+    {"linear", "lower", "higher", "midpoint", "nearest"}
+)
+DEFAULT_DOWNSIDE_TARGET = 0.0
 
 
 def validate_positive_integer(value: object, name: str) -> int:
@@ -16,6 +23,48 @@ def validate_positive_integer(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{name} must be a positive integer.")
     return value
+
+
+def validate_quantiles(quantiles: object) -> tuple[float, ...]:
+    """Return sorted, unique empirical probabilities strictly between zero and one."""
+    if isinstance(quantiles, (str, bytes)) or not isinstance(quantiles, Sequence):
+        raise ValueError("QUANTILES must be a non-empty sequence of numbers.")
+    validated: list[float] = []
+    for value in quantiles:
+        if isinstance(value, bool):
+            raise ValueError("Each QUANTILES value must be strictly between 0 and 1.")
+        try:
+            probability = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Each QUANTILES value must be strictly between 0 and 1."
+            ) from exc
+        if not 0.0 < probability < 1.0:
+            raise ValueError("Each QUANTILES value must be strictly between 0 and 1.")
+        validated.append(probability)
+    if not validated:
+        raise ValueError("QUANTILES must contain at least one probability.")
+    return tuple(sorted(set(validated)))
+
+
+def validate_quantile_method(method: object) -> str:
+    """Return a supported empirical-quantile interpolation method."""
+    normalized = str(method).strip().lower()
+    if normalized not in SUPPORTED_QUANTILE_METHODS:
+        choices = ", ".join(sorted(SUPPORTED_QUANTILE_METHODS))
+        raise ValueError(f"QUANTILE_METHOD must be one of: {choices}.")
+    return normalized
+
+
+def validate_finite_number(value: object, name: str) -> float:
+    """Return a finite floating-point configuration value."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number.") from exc
+    if result != result or result in {float("inf"), float("-inf")}:
+        raise ValueError(f"{name} must be a finite number.")
+    return result
 
 
 def resolve_rolling_min_observations(
@@ -58,6 +107,9 @@ def estimation_conventions(
     observations_per_year: int,
     rolling_window: int,
     rolling_min_observations: int,
+    quantiles: tuple[float, ...] = DEFAULT_QUANTILES,
+    quantile_method: str = DEFAULT_QUANTILE_METHOD,
+    downside_target: float = DEFAULT_DOWNSIDE_TARGET,
 ) -> dict[str, Any]:
     """Return machine-readable conventions for run manifests."""
     return {
@@ -74,6 +126,27 @@ def estimation_conventions(
             "standard_deviation_ddof": SAMPLE_DDOF,
             "covariance_ddof": SAMPLE_DDOF,
             "pearson_correlation": "sample-centered; undefined for constant series",
+            "skewness": (
+                "bias-corrected Fisher-Pearson sample coefficient; requires at "
+                "least 3 observations"
+            ),
+            "kurtosis": (
+                "bias-corrected Fisher excess kurtosis; normal distribution equals "
+                "0; requires at least 4 observations"
+            ),
+        },
+        "return_distribution": {
+            "return_type": "daily_log_return",
+            "quantiles": list(quantiles),
+            "quantile_method": quantile_method,
+            "downside_deviation": {
+                "target": downside_target,
+                "target_return_type": "daily_log_return",
+                "denominator": "all_non_missing_observations",
+                "formula": "sqrt(sum(min(return - target, 0)^2) / n)",
+                "annualized": False,
+            },
+            "interpretation": "historical_description_not_forecast",
         },
         "annualization": {
             "observations_per_year": observations_per_year,

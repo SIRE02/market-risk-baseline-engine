@@ -6,6 +6,9 @@ end_date = "2025-01-01"
 rolling_window = 21
 rolling_min_observations = 21
 observations_per_year = 252
+quantiles = [0.05, 0.25, 0.75, 0.95]
+quantile_method = "linear"
+downside_target = 0.0
 output_dir = "outputs"
 
 # For an offline run, set provider = "csv" and provide a canonical file:

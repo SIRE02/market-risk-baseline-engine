@@ -1,6 +1,6 @@
 # Market-Risk-Baseline-Engine
 
-A Python pipeline that validates adjusted daily prices from Yahoo Finance or a local CSV and produces returns, volatility, covariance, and Pearson-correlation estimates using explicit statistical conventions.
+A Python pipeline that validates adjusted daily prices from Yahoo Finance or a local CSV and produces return-distribution, volatility, covariance, and Pearson-correlation estimates using explicit statistical conventions.
 
 ## What it produces
 
@@ -44,7 +44,7 @@ python -m pip install -e .
 
 ## Configure and run
 
-Version `0.1.3` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
+Version `0.1.4` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
 
 ```powershell
 conda run -n market-risk-baseline-engine market-risk-baseline --config config.example.toml
@@ -61,10 +61,13 @@ conda run -n market-risk-baseline-engine market-risk-baseline `
   --rolling-window 30 `
   --rolling-min-observations 20 `
   --observations-per-year 252 `
+  --quantiles 0.05 0.25 0.75 0.95 `
+  --quantile-method linear `
+  --downside-target 0.0 `
   --output-dir outputs/alternate
 ```
 
-Run `market-risk-baseline --help` for every option. Supported keys are `provider`, `tickers`, `start_date`, `end_date`, `rolling_window`, `rolling_min_observations`, `observations_per_year`, `output_dir`, and `csv_path`. TOML may put them under `[analysis]`; JSON uses a top-level object (or an `analysis` object). Command-line overrides have highest priority, followed by the file and built-in defaults.
+Run `market-risk-baseline --help` for every option. Supported keys are `provider`, `tickers`, `start_date`, `end_date`, `rolling_window`, `rolling_min_observations`, `observations_per_year`, `quantiles`, `quantile_method`, `downside_target`, `output_dir`, and `csv_path`. TOML may put them under `[analysis]`; JSON uses a top-level object (or an `analysis` object). Command-line overrides have highest priority, followed by the file and built-in defaults.
 
 Both providers treat `end_date` as exclusive. For example, `2025-01-01` includes observations before January 1, 2025, but not that date.
 
@@ -121,29 +124,33 @@ The automated tests use deterministic synthetic prices and saved provider-shaped
 conda run -n market-risk-baseline-engine python -m pytest -q
 ```
 
-They verify that returns have fewer rows than prices, contain no infinities, volatility is non-negative, covariance is symmetric and positive semidefinite within numerical tolerance, correlations stay in `[-1, 1]`, rolling outputs never use future observations, complete-case aligned returns contain no missing data, and invalid or insufficient rolling samples fail clearly.
+They verify hand-calculated median, quantile, skewness, excess-kurtosis, and downside-deviation fixtures; return and dependence invariants; rolling no-look-ahead behavior; complete-case alignment; and clear failures for invalid configuration or insufficient samples.
 
 ## Estimation conventions
 
 | Output or metric | Return input | Estimator and scaling |
 | --- | --- | --- |
 | `simple_returns.csv` | Adjusted prices | `P(t) / P(t-1) - 1`; reported as a separate transformation, not used by the current estimators. |
-| Log returns and return summary | Adjusted prices / log returns | `log(P(t) / P(t-1))`; mean uses the available sample, standard deviation is sample-based with `ddof=1`. |
+| Log returns and basic return summary | Adjusted prices / daily log returns | `log(P(t) / P(t-1))`; mean uses the available sample, median is the middle order statistic, and standard deviation is sample-based with `ddof=1`. |
+| Empirical quantiles | Daily log returns | Configurable probabilities, defaulting to 5%, 25%, 75%, and 95%; `linear` interpolation by default. `lower`, `higher`, `midpoint`, and `nearest` are also supported. |
+| Skewness | Daily log returns | Bias-corrected Fisher-Pearson sample skewness, requiring at least three observations. |
+| Excess kurtosis | Daily log returns | Bias-corrected Fisher excess kurtosis, where a normal distribution has value zero, requiring at least four observations. |
+| Downside deviation | Daily log returns | `sqrt(sum(min(r - target, 0)^2) / n)`, where `n` counts all non-missing returns. The daily log-return target defaults to zero; the result is daily and is not annualized. |
 | Daily volatility | Log returns | Sample standard deviation with `ddof=1`. |
 | Annualized volatility | Log returns | Daily sample volatility multiplied by `sqrt(observations_per_year)`. |
 | Covariance matrix | Complete-case log returns | Daily sample covariance with `ddof=1`; it is not annualized. |
 | Pearson correlation | Complete-case log returns | Sample-centered Pearson correlation. It is undefined (`NaN`) for a constant series. |
 | Rolling volatility/covariance/correlation | Log returns | The same estimator as its full-sample counterpart over a trailing window. |
 
-No current dispersion or covariance output uses a population estimator (`ddof=0`). `observations_per_year` defaults to 252 and is configurable; it affects volatility annualization only. Square-root-of-time annualization is a baseline approximation, not a universal law.
+No standard-deviation or covariance output uses a population estimator (`ddof=0`). Downside deviation deliberately uses all non-missing observations in its denominator, not only observations below the target. `observations_per_year` defaults to 252 and is configurable; it affects volatility annualization only. Square-root-of-time annualization is a baseline approximation, not a universal law.
 
 Rolling windows are backward-looking, include the current observation, and never use future rows. `rolling_min_observations` defaults to `rolling_window`, which leaves the first `window - 1` estimates as `NaN`. If the configured minimum is smaller than the window, estimates begin at that minimum using an incomplete trailing window. At least two observations are required, the minimum cannot exceed the window, and a sample shorter than the minimum fails explicitly.
 
-Cross-asset covariance and correlation use complete-case alignment. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. Correlation describes linear comovement, does not establish causation, and can change across sample periods. These outputs are historical descriptions rather than forecasts.
+Cross-asset covariance and correlation use complete-case alignment. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. The quantile probabilities and method, skewness and kurtosis bias conventions, and complete downside-deviation definition are repeated in every `run_manifest.json`. Correlation describes linear comovement, does not establish causation, and can change across sample periods. All return-distribution and dependence outputs are historical sample descriptions rather than forecasts.
 
 ## Error handling
 
-The program reports invalid configuration, date ranges, output/source paths, rolling windows and minimum observations, annualization settings, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, insufficient common history, and insufficient return samples with readable messages.
+The program reports invalid configuration, date ranges, output/source paths, rolling windows and minimum observations, annualization settings, quantile probabilities or methods, downside targets, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, insufficient common history, and insufficient return samples with readable messages.
 
 Potential future additions include cumulative returns, drawdowns, a small interface, and additional risk metrics. Forecasting, VaR, portfolio optimization, machine learning, live feeds, automated trading, and complex infrastructure remain intentionally out of scope for version one.
 
