@@ -41,7 +41,7 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
         capture_output=True,
         text=True,
     )
-    wheels = list(wheel_directory.glob("market_risk_baseline_engine-0.1.1-*.whl"))
+    wheels = list(wheel_directory.glob("market_risk_baseline_engine-0.1.2-*.whl"))
     assert len(wheels) == 1
 
     subprocess.run(
@@ -73,7 +73,7 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
                 "dist = distribution('market-risk-baseline-engine'); "
                 "entry_point = next(ep for ep in dist.entry_points "
                 "if ep.group == 'console_scripts' and ep.name == 'market-risk-baseline'); "
-                "assert market_risk_baseline.__version__ == dist.version == '0.1.1'; "
+                "assert market_risk_baseline.__version__ == dist.version == '0.1.2'; "
                 "assert callable(entry_point.load())"
             ),
         ],
@@ -88,7 +88,13 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
     installed_tests = tmp_path / "installed_tests"
     nested_pytest_temp = tmp_path / "nested_pytest_temp"
     installed_tests.mkdir()
-    for filename in ("test_data_loader.py", "test_metrics.py", "test_cli.py"):
+    for filename in (
+        "test_config.py",
+        "test_data_loader.py",
+        "test_metrics.py",
+        "test_providers.py",
+        "test_cli.py",
+    ):
         shutil.copy2(repository_root / "tests" / filename, installed_tests / filename)
     test_result = subprocess.run(
         [

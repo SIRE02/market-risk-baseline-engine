@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import argparse
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
+from market_risk_baseline.config import AnalysisConfig, load_configuration
 from market_risk_baseline.correlation import correlation_matrix, extreme_correlation_pairs
-from market_risk_baseline.data_loader import MarketDataError, download_adjusted_prices
+from market_risk_baseline.data_loader import (
+    MarketDataError,
+    load_market_data,
+    persist_acquisition,
+    persist_quality_report,
+)
+from market_risk_baseline.providers import MarketDataProvider, provider_for
+from market_risk_baseline.reporting import build_run_manifest, persist_run_manifest
 from market_risk_baseline.returns import (
     calculate_log_returns,
     calculate_simple_returns,
@@ -17,39 +28,107 @@ from market_risk_baseline.visualizations import (
     plot_rolling_volatility,
 )
 
-# Phase 2 release 0.1.2 will replace these editable defaults with validated CLI/config input.
-TICKERS = ["SPY", "QQQ", "TLT", "GLD"]
-START_DATE = "2020-01-01"
-END_DATE = "2025-01-01"
-ROLLING_WINDOW = 21
-TRADING_DAYS = 252
-OUTPUT_DIR = Path("outputs")
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="market-risk-baseline",
+        description="Analyze validated adjusted daily prices from Yahoo or a local CSV.",
+    )
+    parser.add_argument("--config", type=Path, help="TOML or JSON configuration file")
+    parser.add_argument("--provider", choices=("yahoo", "csv"))
+    parser.add_argument(
+        "--tickers",
+        nargs="+",
+        help="Ticker symbols separated by spaces (commas are also accepted)",
+    )
+    parser.add_argument("--start-date")
+    parser.add_argument("--end-date")
+    parser.add_argument("--rolling-window", type=int)
+    parser.add_argument("--trading-days", type=int)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--csv-path", type=Path)
+    return parser
 
 
-def run_analysis() -> None:
-    """Run the complete baseline analysis and save all required outputs."""
-    print(f"Downloading adjusted prices for {', '.join(TICKERS)}...")
-    prices = download_adjusted_prices(TICKERS, START_DATE, END_DATE, ROLLING_WINDOW)
+def _configuration_from_args(arguments: argparse.Namespace) -> AnalysisConfig:
+    tickers: list[str] | None = None
+    if arguments.tickers is not None:
+        tickers = [
+            ticker
+            for item in arguments.tickers
+            for ticker in item.split(",")
+            if ticker.strip()
+        ]
+    overrides: dict[str, Any] = {
+        "provider": arguments.provider,
+        "tickers": tickers,
+        "start_date": arguments.start_date,
+        "end_date": arguments.end_date,
+        "rolling_window": arguments.rolling_window,
+        "trading_days": arguments.trading_days,
+        "output_dir": arguments.output_dir,
+        "csv_path": arguments.csv_path,
+    }
+    return load_configuration(arguments.config, overrides)
+
+
+def run_analysis(
+    config: AnalysisConfig | None = None,
+    provider: MarketDataProvider | None = None,
+) -> None:
+    """Run the complete analysis from one validated configuration."""
+    config = config or load_configuration()
+    selected_provider = provider or provider_for(config)
+    print(
+        f"Loading adjusted prices from {config.provider} for "
+        f"{', '.join(config.tickers)}..."
+    )
+    market_data = load_market_data(config, selected_provider)
+    prices = market_data.prices
     simple_returns = calculate_simple_returns(prices)
     log_returns = calculate_log_returns(prices)
     return_summary = summarize_returns(log_returns)
-    vol_summary = volatility_summary(log_returns, TRADING_DAYS)
-    rolling = rolling_volatility(log_returns, ROLLING_WINDOW, TRADING_DAYS)
+    vol_summary = volatility_summary(log_returns, config.trading_days)
+    rolling = rolling_volatility(
+        log_returns, config.rolling_window, config.trading_days
+    )
     correlations = correlation_matrix(log_returns)
     highest, lowest = extreme_correlation_pairs(correlations)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    prices.to_csv(OUTPUT_DIR / "adjusted_prices.csv", index_label="date")
-    simple_returns.to_csv(OUTPUT_DIR / "simple_returns.csv", index_label="date")
-    log_returns.to_csv(OUTPUT_DIR / "log_returns.csv", index_label="date")
-    return_summary.to_csv(OUTPUT_DIR / "return_summary.csv")
-    vol_summary.to_csv(OUTPUT_DIR / "volatility_summary.csv")
-    rolling.to_csv(OUTPUT_DIR / "rolling_volatility.csv", index_label="date")
-    correlations.to_csv(OUTPUT_DIR / "correlation_matrix.csv")
+    output_dir = config.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    artifacts = [
+        "adjusted_prices.csv",
+        "simple_returns.csv",
+        "log_returns.csv",
+        "return_summary.csv",
+        "volatility_summary.csv",
+        "rolling_volatility.csv",
+        "correlation_matrix.csv",
+        "rolling_volatility.png",
+        "correlation_heatmap.png",
+        "data_quality_report.json",
+        "run_manifest.json",
+    ]
+    prices.to_csv(output_dir / "adjusted_prices.csv", index_label="date")
+    simple_returns.to_csv(output_dir / "simple_returns.csv", index_label="date")
+    log_returns.to_csv(output_dir / "log_returns.csv", index_label="date")
+    return_summary.to_csv(output_dir / "return_summary.csv")
+    vol_summary.to_csv(output_dir / "volatility_summary.csv")
+    rolling.to_csv(output_dir / "rolling_volatility.csv", index_label="date")
+    correlations.to_csv(output_dir / "correlation_matrix.csv")
     plot_rolling_volatility(
-        rolling, OUTPUT_DIR / "rolling_volatility.png", ROLLING_WINDOW
+        rolling, output_dir / "rolling_volatility.png", config.rolling_window
     )
-    plot_correlation_heatmap(correlations, OUTPUT_DIR / "correlation_heatmap.png")
+    plot_correlation_heatmap(correlations, output_dir / "correlation_heatmap.png")
+    persist_quality_report(
+        market_data.quality_report, output_dir / "data_quality_report.json"
+    )
+    if market_data.payload.provider == "yahoo":
+        artifacts.append("acquired_adjusted_prices.csv")
+        persist_acquisition(prices, output_dir / "acquired_adjusted_prices.csv")
+    manifest = build_run_manifest(config, market_data, artifacts)
+    persist_run_manifest(manifest, output_dir / "run_manifest.json")
 
     print("\nDaily and annualized volatility:")
     print(vol_summary.to_string(float_format=lambda value: f"{value:.4f}"))
@@ -57,14 +136,15 @@ def run_analysis() -> None:
     print(correlations.to_string(float_format=lambda value: f"{value:.3f}"))
     print(f"\nHighest pair: {highest[0]} / {highest[1]} ({highest[2]:.3f})")
     print(f"Lowest pair:  {lowest[0]} / {lowest[1]} ({lowest[2]:.3f})")
-    print(f"\nSaved tables and charts to: {OUTPUT_DIR.resolve()}")
+    print(f"\nSaved tables, charts, quality report, and manifest to: {output_dir.resolve()}")
 
 
-def main() -> None:
-    """Run the CLI and convert expected analysis failures into a concise exit message."""
+def main(argv: Sequence[str] | None = None) -> None:
+    """Parse arguments and convert expected failures into a concise exit message."""
     try:
-        run_analysis()
-    except (MarketDataError, ValueError) as exc:
+        arguments = _parser().parse_args(argv)
+        run_analysis(_configuration_from_args(arguments))
+    except (MarketDataError, OSError, ValueError) as exc:
         raise SystemExit(f"Analysis failed: {exc}") from exc
 
 

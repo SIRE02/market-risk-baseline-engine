@@ -1,0 +1,11 @@
+[analysis]
+provider = "yahoo"
+tickers = ["SPY", "QQQ", "TLT", "GLD"]
+start_date = "2020-01-01"
+end_date = "2025-01-01"
+rolling_window = 21
+trading_days = 252
+output_dir = "outputs"
+
+# For an offline run, set provider = "csv" and provide a canonical file:
+# csv_path = "data/adjusted_prices.csv"

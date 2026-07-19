@@ -1,0 +1,149 @@
+"""Validated configuration loading for analysis runs."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+from datetime import date
+import json
+from pathlib import Path
+import tomllib
+from typing import Any
+
+
+DEFAULT_CONFIGURATION: dict[str, Any] = {
+    "provider": "yahoo",
+    "tickers": ["SPY", "QQQ", "TLT", "GLD"],
+    "start_date": "2020-01-01",
+    "end_date": "2025-01-01",
+    "rolling_window": 21,
+    "trading_days": 252,
+    "output_dir": "outputs",
+    "csv_path": None,
+}
+
+
+@dataclass(frozen=True)
+class AnalysisConfig:
+    """Complete validated configuration for one analysis run."""
+
+    provider: str = "yahoo"
+    tickers: tuple[str, ...] = ("SPY", "QQQ", "TLT", "GLD")
+    start_date: str = "2020-01-01"
+    end_date: str = "2025-01-01"
+    rolling_window: int = 21
+    trading_days: int = 252
+    output_dir: Path = Path("outputs")
+    csv_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        provider = str(self.provider).strip().lower()
+        if provider not in {"yahoo", "csv"}:
+            raise ValueError("PROVIDER must be either 'yahoo' or 'csv'.")
+
+        tickers_value = self.tickers
+        if isinstance(tickers_value, (str, bytes)):
+            tickers_value = tuple(str(tickers_value).split(","))
+        symbols = tuple(
+            dict.fromkeys(str(ticker).strip().upper() for ticker in tickers_value)
+        )
+        symbols = tuple(symbol for symbol in symbols if symbol)
+        if len(symbols) < 2:
+            raise ValueError("At least two unique ticker symbols are required.")
+
+        try:
+            start = date.fromisoformat(self.start_date)
+            end = date.fromisoformat(self.end_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("START_DATE and END_DATE must use YYYY-MM-DD format.") from exc
+        if start >= end:
+            raise ValueError("START_DATE must be earlier than END_DATE.")
+
+        _positive_integer(self.rolling_window, "ROLLING_WINDOW")
+        _positive_integer(self.trading_days, "TRADING_DAYS")
+
+        output_dir = Path(self.output_dir).expanduser()
+        if not str(output_dir).strip():
+            raise ValueError("OUTPUT_DIR must not be empty.")
+        if output_dir.exists() and not output_dir.is_dir():
+            raise ValueError(f"OUTPUT_DIR is not a directory: {output_dir}")
+        csv_path = Path(self.csv_path).expanduser() if self.csv_path is not None else None
+        if provider == "csv":
+            if csv_path is None:
+                raise ValueError("CSV_PATH is required when PROVIDER is 'csv'.")
+            if not csv_path.is_file():
+                raise ValueError(f"CSV_PATH does not identify a readable file: {csv_path}")
+
+        object.__setattr__(self, "provider", provider)
+        object.__setattr__(self, "tickers", symbols)
+        object.__setattr__(self, "output_dir", output_dir)
+        object.__setattr__(self, "csv_path", csv_path)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+        values = asdict(self)
+        values["tickers"] = list(self.tickers)
+        values["output_dir"] = str(self.output_dir)
+        values["csv_path"] = str(self.csv_path) if self.csv_path is not None else None
+        return values
+
+
+def _positive_integer(value: object, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
+def _read_config_file(path: Path) -> dict[str, Any]:
+    try:
+        if path.suffix.lower() == ".json":
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        elif path.suffix.lower() == ".toml":
+            with path.open("rb") as stream:
+                loaded = tomllib.load(stream)
+        else:
+            raise ValueError("Configuration files must use .toml or .json.")
+    except OSError as exc:
+        raise ValueError(f"Could not read configuration file {path}: {exc}") from exc
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise ValueError(f"Invalid configuration file {path}: {exc}") from exc
+
+    if not isinstance(loaded, dict):
+        raise ValueError("The configuration file must contain an object/table.")
+    if "analysis" in loaded:
+        loaded = loaded["analysis"]
+        if not isinstance(loaded, dict):
+            raise ValueError("The 'analysis' configuration must be an object/table.")
+    return loaded
+
+
+def load_configuration(
+    config_path: Path | None = None,
+    overrides: Mapping[str, Any] | None = None,
+) -> AnalysisConfig:
+    """Merge defaults, an optional TOML/JSON file, and command-line overrides."""
+    values = dict(DEFAULT_CONFIGURATION)
+    if config_path is not None:
+        path = Path(config_path)
+        file_values = _read_config_file(path)
+        unknown = sorted(set(file_values) - set(DEFAULT_CONFIGURATION))
+        if unknown:
+            raise ValueError(f"Unknown configuration option(s): {', '.join(unknown)}")
+        values.update(file_values)
+
+    if overrides:
+        unknown = sorted(set(overrides) - set(DEFAULT_CONFIGURATION))
+        if unknown:
+            raise ValueError(f"Unknown configuration override(s): {', '.join(unknown)}")
+        values.update({key: value for key, value in overrides.items() if value is not None})
+
+    tickers = values["tickers"]
+    if isinstance(tickers, str):
+        values["tickers"] = tuple(part for part in tickers.split(","))
+    elif isinstance(tickers, Sequence):
+        values["tickers"] = tuple(tickers)
+    else:
+        raise ValueError("TICKERS must be a list or a comma-separated string.")
+    values["output_dir"] = Path(values["output_dir"])
+    if values.get("csv_path") is not None:
+        values["csv_path"] = Path(values["csv_path"])
+    return AnalysisConfig(**values)
