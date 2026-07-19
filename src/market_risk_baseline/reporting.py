@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 import json
-from pathlib import Path
 import subprocess
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import Any
 
 from market_risk_baseline import __version__
@@ -46,16 +46,19 @@ def build_run_manifest(
 ) -> dict[str, Any]:
     """Build the reproducibility and source-lineage record for a completed run."""
     quality = market_data.quality_report
+    rolling_minimum = config.rolling_min_observations
+    # AnalysisConfig resolves this during validation.
+    assert rolling_minimum is not None
     return {
         "project": "market-risk-baseline-engine",
         "project_version": __version__,
         "git_commit": _git_commit(),
-        "execution_timestamp": datetime.now(timezone.utc).isoformat(),
+        "execution_timestamp": datetime.now(UTC).isoformat(),
         "configuration": config.to_dict(),
         "estimation_conventions": estimation_conventions(
             config.observations_per_year,
             config.rolling_window,
-            config.rolling_min_observations,
+            rolling_minimum,
             config.quantiles,
             config.quantile_method,
             config.downside_target,

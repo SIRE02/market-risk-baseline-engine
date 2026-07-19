@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -11,7 +11,6 @@ import pandas as pd
 import yfinance as yf
 
 from market_risk_baseline.config import AnalysisConfig
-
 
 CANONICAL_COLUMNS = ("date", "ticker", "adjusted_close")
 
@@ -48,7 +47,7 @@ class MarketDataProvider(Protocol):
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def extract_yahoo_adjusted_close(
@@ -65,15 +64,19 @@ def extract_yahoo_adjusted_close(
                 break
         else:
             raise MarketDataError(
-                "Adjusted Close is unavailable. Raw Close will not be used as a fallback."
+                "Adjusted Close is unavailable. Raw Close will not be used as a "
+                "fallback."
             )
     else:
         if "Adj Close" not in raw.columns:
             raise MarketDataError(
-                "Adjusted Close is unavailable. Raw Close will not be used as a fallback."
+                "Adjusted Close is unavailable. Raw Close will not be used as a "
+                "fallback."
             )
         if len(tickers) != 1:
-            raise MarketDataError("The provider response did not identify every requested ticker.")
+            raise MarketDataError(
+                "The provider response did not identify every requested ticker."
+            )
         adjusted = raw.loc[:, ["Adj Close"]].copy()
         adjusted.columns = [tickers[0]]
 
@@ -141,7 +144,9 @@ class CSVProvider:
         try:
             raw = pd.read_csv(path)
         except (OSError, pd.errors.ParserError) as exc:
-            raise MarketDataError(f"Could not read CSV market data from {path}: {exc}") from exc
+            raise MarketDataError(
+                f"Could not read CSV market data from {path}: {exc}"
+            ) from exc
         return ProviderPayload(
             data=raw,
             provider=self.name,
@@ -150,7 +155,7 @@ class CSVProvider:
             metadata={
                 "schema": list(CANONICAL_COLUMNS),
                 "file_modified_at": datetime.fromtimestamp(
-                    path.stat().st_mtime, timezone.utc
+                    path.stat().st_mtime, UTC
                 ).isoformat(),
             },
         )
@@ -158,7 +163,9 @@ class CSVProvider:
     def normalize(
         self, payload: ProviderPayload, requested_tickers: tuple[str, ...]
     ) -> pd.DataFrame:
-        missing = [column for column in CANONICAL_COLUMNS if column not in payload.data.columns]
+        missing = [
+            column for column in CANONICAL_COLUMNS if column not in payload.data.columns
+        ]
         if missing:
             raise MarketDataError(
                 "CSV input is missing canonical column(s): " + ", ".join(missing)

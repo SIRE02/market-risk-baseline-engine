@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-
 DEFAULT_OBSERVATIONS_PER_YEAR = 252
 DEFAULT_ROLLING_WINDOW = 21
 SAMPLE_DDOF = 1
@@ -56,7 +55,7 @@ def validate_quantile_method(method: object) -> str:
     return normalized
 
 
-def validate_finite_number(value: object, name: str) -> float:
+def validate_finite_number(value: Any, name: str) -> float:
     """Return a finite floating-point configuration value."""
     try:
         result = float(value)
@@ -80,9 +79,7 @@ def resolve_rolling_min_observations(
             "ROLLING_MIN_OBSERVATIONS must be at least 2 for sample estimators."
         )
     if minimum > window:
-        raise ValueError(
-            "ROLLING_MIN_OBSERVATIONS must not exceed ROLLING_WINDOW."
-        )
+        raise ValueError("ROLLING_MIN_OBSERVATIONS must not exceed ROLLING_WINDOW.")
     return minimum
 
 
@@ -92,9 +89,7 @@ def validate_rolling_sample(
     rolling_min_observations: int | None,
 ) -> int:
     """Validate rolling parameters and ensure the sample can meet the minimum."""
-    minimum = resolve_rolling_min_observations(
-        rolling_window, rolling_min_observations
-    )
+    minimum = resolve_rolling_min_observations(rolling_window, rolling_min_observations)
     if sample_size < minimum:
         raise ValueError(
             "Insufficient return observations for rolling estimation: "

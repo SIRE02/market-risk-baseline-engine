@@ -44,7 +44,7 @@ python -m pip install -e .
 
 ## Configure and run
 
-Version `0.1.4` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
+Version `0.1.5` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
 
 ```powershell
 conda run -n market-risk-baseline-engine market-risk-baseline --config config.example.toml
@@ -100,7 +100,9 @@ date,ticker,adjusted_close
 2024-01-03,QQQ,405.274
 ```
 
-Do not put raw closes in `adjusted_close`. The engine cannot infer or reconstruct split/dividend adjustments and deliberately refuses Yahoo responses without `Adj Close`. Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. A run needs at least `rolling_min_observations + 1` common adjusted-price observations so the price series yields the configured minimum number of returns.
+Adjusted prices are used so stock splits and cash distributions do not appear as ordinary market gains or losses in the return series. Do not put raw closes in `adjusted_close`: the engine cannot infer or reconstruct split/dividend adjustments and deliberately refuses Yahoo responses without `Adj Close`. The exact adjustment remains provider-defined.
+
+Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. In particular, forward-filling would invent a stale price observation, suppress that asset's measured return, and potentially distort cross-asset dependence. A run needs at least `rolling_min_observations + 1` common adjusted-price observations so the price series yields the configured minimum number of returns.
 
 `outputs/acquired_adjusted_prices.csv` from a successful Yahoo run follows this schema and can be passed later with `--provider csv --csv-path ...`.
 
@@ -118,13 +120,24 @@ The Yahoo adapter pins `yfinance` and explicitly requests `Adj Close` with `auto
 
 ## Tests
 
-The automated tests use deterministic synthetic prices and saved provider-shaped responses; they do not require network access. They include Yahoo/CSV equivalence, hand-calculated covariance, symmetry and positive-semidefinite checks, rolling boundary and no-look-ahead checks, constant-series behavior, quality-report checks, a wheel build, isolated-target installation, package import, entry-point check, and an offline complete-analysis test:
+The automated tests use deterministic synthetic prices and saved provider-shaped responses; they do not require network access. Calculation tests call the return, dependence, and risk estimators without providers or file output, while provider and reporting tests exercise I/O separately. The suite includes Yahoo/CSV equivalence, hand-calculated covariance, symmetry and positive-semidefinite checks, rolling boundary and no-look-ahead checks, constant-series behavior, quality-report checks, a wheel build, isolated-target installation, installed-CLI execution, package import, entry-point checks, and an offline complete-analysis test:
 
 ```powershell
 conda run -n market-risk-baseline-engine python -m pytest -q
 ```
 
 They verify hand-calculated median, quantile, skewness, excess-kurtosis, and downside-deviation fixtures; return and dependence invariants; rolling no-look-ahead behavior; complete-case alignment; and clear failures for invalid configuration or insufficient samples.
+
+Install the development tools and run the same checks enforced by CI with:
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy
+python -m pytest -q
+python -m build
+```
 
 ## Estimation conventions
 
@@ -146,7 +159,7 @@ No standard-deviation or covariance output uses a population estimator (`ddof=0`
 
 Rolling windows are backward-looking, include the current observation, and never use future rows. `rolling_min_observations` defaults to `rolling_window`, which leaves the first `window - 1` estimates as `NaN`. If the configured minimum is smaller than the window, estimates begin at that minimum using an incomplete trailing window. At least two observations are required, the minimum cannot exceed the window, and a sample shorter than the minimum fails explicitly.
 
-Cross-asset covariance and correlation use complete-case alignment. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. The quantile probabilities and method, skewness and kurtosis bias conventions, and complete downside-deviation definition are repeated in every `run_manifest.json`. Correlation describes linear comovement, does not establish causation, and can change across sample periods. All return-distribution and dependence outputs are historical sample descriptions rather than forecasts.
+Cross-asset covariance and correlation use complete-case alignment: a date is retained only when every selected asset has a valid price (and therefore a valid return after transformation). This provides one consistent sample for every pair, but it can shorten the history and create selection effects when missingness is systematic; the quality report discloses the reduction. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. The quantile probabilities and method, skewness and kurtosis bias conventions, and complete downside-deviation definition are repeated in every `run_manifest.json`. Correlation describes linear comovement, does not establish causation, and can change across sample periods. All return-distribution and dependence outputs are historical sample descriptions rather than forecasts.
 
 ## Error handling
 

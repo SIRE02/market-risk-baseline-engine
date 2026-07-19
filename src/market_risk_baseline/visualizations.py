@@ -14,7 +14,9 @@ import pandas as pd
 import seaborn as sns
 
 
-def plot_rolling_volatility(rolling: pd.DataFrame, output_path: Path, window: int) -> None:
+def plot_rolling_volatility(
+    rolling: pd.DataFrame, output_path: Path, window: int
+) -> None:
     """Save a labeled annualized rolling-volatility line chart."""
     sns.set_theme(style="whitegrid", context="notebook")
     figure, axis = plt.subplots(figsize=(12, 7))
@@ -24,7 +26,9 @@ def plot_rolling_volatility(rolling: pd.DataFrame, output_path: Path, window: in
     axis.set_ylabel("Annualized volatility")
     axis.yaxis.set_major_formatter(lambda value, _position: f"{value:.0%}")
     axis.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=5, maxticks=10))
-    axis.xaxis.set_major_formatter(mdates.ConciseDateFormatter(axis.xaxis.get_major_locator()))
+    axis.xaxis.set_major_formatter(
+        mdates.ConciseDateFormatter(axis.xaxis.get_major_locator())
+    )
     axis.legend(title="Ticker", frameon=True, ncols=2)
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
@@ -55,4 +59,3 @@ def plot_correlation_heatmap(correlations: pd.DataFrame, output_path: Path) -> N
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
-

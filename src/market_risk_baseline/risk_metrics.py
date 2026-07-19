@@ -40,7 +40,7 @@ def rolling_volatility(
     minimum = validate_rolling_sample(
         len(log_returns), rolling_window, rolling_min_observations
     )
-    rolling = log_returns.rolling(
-        window=rolling_window, min_periods=minimum
-    ).std(ddof=SAMPLE_DDOF)
+    rolling = log_returns.rolling(window=rolling_window, min_periods=minimum).std(
+        ddof=SAMPLE_DDOF
+    )
     return rolling * np.sqrt(observations_per_year)

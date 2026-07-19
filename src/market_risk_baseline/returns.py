@@ -7,8 +7,8 @@ import pandas as pd
 
 from market_risk_baseline.estimation import (
     DEFAULT_DOWNSIDE_TARGET,
-    DEFAULT_QUANTILES,
     DEFAULT_QUANTILE_METHOD,
+    DEFAULT_QUANTILES,
     validate_finite_number,
     validate_quantile_method,
     validate_quantiles,
@@ -19,7 +19,9 @@ def _validate_prices(prices: pd.DataFrame) -> None:
     if prices.empty:
         raise ValueError("The price matrix is empty.")
     if (prices <= 0).any(axis=None):
-        raise ValueError("All adjusted prices must be positive to calculate log returns.")
+        raise ValueError(
+            "All adjusted prices must be positive to calculate log returns."
+        )
 
 
 def calculate_simple_returns(prices: pd.DataFrame) -> pd.DataFrame:
@@ -79,7 +81,5 @@ def summarize_returns(
     summary["maximum_return"] = log_returns.max()
     summary["sample_skewness"] = log_returns.skew()
     summary["sample_excess_kurtosis"] = log_returns.kurt()
-    summary["downside_deviation"] = np.sqrt(
-        shortfalls.pow(2).sum() / non_missing_count
-    )
+    summary["downside_deviation"] = np.sqrt(shortfalls.pow(2).sum() / non_missing_count)
     return summary

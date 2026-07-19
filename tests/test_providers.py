@@ -106,9 +106,7 @@ def test_quality_report_counts_duplicates_invalid_prices_and_alignment() -> None
 
 def test_csv_schema_is_strict_and_yahoo_errors_do_not_fallback(tmp_path: Path) -> None:
     csv_path = tmp_path / "bad.csv"
-    pd.DataFrame({"date": ["2024-01-01"], "AAA": [100]}).to_csv(
-        csv_path, index=False
-    )
+    pd.DataFrame({"date": ["2024-01-01"], "AAA": [100]}).to_csv(csv_path, index=False)
     config = AnalysisConfig(
         provider="csv",
         csv_path=csv_path,
@@ -143,7 +141,9 @@ def test_persisted_yahoo_acquisition_is_reusable_as_csv(tmp_path: Path) -> None:
 
     reloaded = load_market_data(config, CSVProvider()).prices
 
-    pd.testing.assert_frame_equal(reloaded, prices.rename_axis("date"), check_freq=False)
+    pd.testing.assert_frame_equal(
+        reloaded, prices.rename_axis("date"), check_freq=False
+    )
 
 
 def test_configured_rolling_minimum_controls_the_history_gate() -> None:

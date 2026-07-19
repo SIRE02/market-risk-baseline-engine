@@ -86,7 +86,9 @@ def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> No
     log = calculate_log_returns(prices)
     summary = volatility_summary(log, observations_per_year=252)
     expected_daily = log.std(ddof=1)
-    pd.testing.assert_series_equal(summary["daily_volatility"], expected_daily, check_names=False)
+    pd.testing.assert_series_equal(
+        summary["daily_volatility"], expected_daily, check_names=False
+    )
     np.testing.assert_allclose(
         summary["annualized_volatility"], expected_daily * np.sqrt(252)
     )
@@ -95,9 +97,7 @@ def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> No
 
 def test_rolling_window_validation_and_values(prices: pd.DataFrame) -> None:
     log = calculate_log_returns(prices)
-    rolling = rolling_volatility(
-        log, rolling_window=3, observations_per_year=252
-    )
+    rolling = rolling_volatility(log, rolling_window=3, observations_per_year=252)
     assert rolling.iloc[:2].isna().all(axis=None)
     expected = log.iloc[:3].std(ddof=1) * np.sqrt(252)
     np.testing.assert_allclose(rolling.iloc[2], expected)

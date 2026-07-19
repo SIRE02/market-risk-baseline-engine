@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
-import json
 from pathlib import Path
-import tomllib
 from typing import Any
 
 from market_risk_baseline.estimation import (
     DEFAULT_DOWNSIDE_TARGET,
     DEFAULT_OBSERVATIONS_PER_YEAR,
-    DEFAULT_QUANTILES,
     DEFAULT_QUANTILE_METHOD,
+    DEFAULT_QUANTILES,
     DEFAULT_ROLLING_WINDOW,
     resolve_rolling_min_observations,
     validate_finite_number,
@@ -22,7 +22,6 @@ from market_risk_baseline.estimation import (
     validate_quantile_method,
     validate_quantiles,
 )
-
 
 DEFAULT_CONFIGURATION: dict[str, Any] = {
     "provider": "yahoo",
@@ -76,16 +75,16 @@ class AnalysisConfig:
             start = date.fromisoformat(self.start_date)
             end = date.fromisoformat(self.end_date)
         except (TypeError, ValueError) as exc:
-            raise ValueError("START_DATE and END_DATE must use YYYY-MM-DD format.") from exc
+            raise ValueError(
+                "START_DATE and END_DATE must use YYYY-MM-DD format."
+            ) from exc
         if start >= end:
             raise ValueError("START_DATE must be earlier than END_DATE.")
 
         rolling_min_observations = resolve_rolling_min_observations(
             self.rolling_window, self.rolling_min_observations
         )
-        validate_positive_integer(
-            self.observations_per_year, "OBSERVATIONS_PER_YEAR"
-        )
+        validate_positive_integer(self.observations_per_year, "OBSERVATIONS_PER_YEAR")
         quantiles = validate_quantiles(self.quantiles)
         quantile_method = validate_quantile_method(self.quantile_method)
         downside_target = validate_finite_number(
@@ -97,21 +96,23 @@ class AnalysisConfig:
             raise ValueError("OUTPUT_DIR must not be empty.")
         if output_dir.exists() and not output_dir.is_dir():
             raise ValueError(f"OUTPUT_DIR is not a directory: {output_dir}")
-        csv_path = Path(self.csv_path).expanduser() if self.csv_path is not None else None
+        csv_path = (
+            Path(self.csv_path).expanduser() if self.csv_path is not None else None
+        )
         if provider == "csv":
             if csv_path is None:
                 raise ValueError("CSV_PATH is required when PROVIDER is 'csv'.")
             if not csv_path.is_file():
-                raise ValueError(f"CSV_PATH does not identify a readable file: {csv_path}")
+                raise ValueError(
+                    f"CSV_PATH does not identify a readable file: {csv_path}"
+                )
 
         object.__setattr__(self, "provider", provider)
         object.__setattr__(self, "tickers", symbols)
         object.__setattr__(self, "quantiles", quantiles)
         object.__setattr__(self, "quantile_method", quantile_method)
         object.__setattr__(self, "downside_target", downside_target)
-        object.__setattr__(
-            self, "rolling_min_observations", rolling_min_observations
-        )
+        object.__setattr__(self, "rolling_min_observations", rolling_min_observations)
         object.__setattr__(self, "output_dir", output_dir)
         object.__setattr__(self, "csv_path", csv_path)
 
@@ -166,7 +167,9 @@ def load_configuration(
         unknown = sorted(set(overrides) - set(DEFAULT_CONFIGURATION))
         if unknown:
             raise ValueError(f"Unknown configuration override(s): {', '.join(unknown)}")
-        values.update({key: value for key, value in overrides.items() if value is not None})
+        values.update(
+            {key: value for key, value in overrides.items() if value is not None}
+        )
 
     tickers = values["tickers"]
     if isinstance(tickers, str):

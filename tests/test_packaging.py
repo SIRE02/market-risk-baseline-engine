@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
+
+EXPECTED_VERSION = "0.1.5"
 
 
 def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> None:
@@ -41,7 +43,9 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
         capture_output=True,
         text=True,
     )
-    wheels = list(wheel_directory.glob("market_risk_baseline_engine-0.1.4-*.whl"))
+    wheels = list(
+        wheel_directory.glob(f"market_risk_baseline_engine-{EXPECTED_VERSION}-*.whl")
+    )
     assert len(wheels) == 1
 
     subprocess.run(
@@ -72,8 +76,10 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
                 "import market_risk_baseline; "
                 "dist = distribution('market-risk-baseline-engine'); "
                 "entry_point = next(ep for ep in dist.entry_points "
-                "if ep.group == 'console_scripts' and ep.name == 'market-risk-baseline'); "
-                "assert market_risk_baseline.__version__ == dist.version == '0.1.4'; "
+                "if ep.group == 'console_scripts' "
+                "and ep.name == 'market-risk-baseline'); "
+                "assert market_risk_baseline.__version__ == dist.version "
+                f"== '{EXPECTED_VERSION}'; "
                 "assert callable(entry_point.load())"
             ),
         ],
@@ -84,6 +90,54 @@ def test_wheel_builds_and_imports_outside_the_source_tree(tmp_path: Path) -> Non
         text=True,
     )
     assert import_result.returncode == 0, import_result.stderr
+
+    csv_path = tmp_path / "adjusted_prices.csv"
+    csv_path.write_text(
+        "date,ticker,adjusted_close\n"
+        "2024-01-02,AAA,100\n"
+        "2024-01-03,AAA,101\n"
+        "2024-01-04,AAA,102\n"
+        "2024-01-05,AAA,103\n"
+        "2024-01-08,AAA,105\n"
+        "2024-01-02,BBB,50\n"
+        "2024-01-03,BBB,51\n"
+        "2024-01-04,BBB,50.5\n"
+        "2024-01-05,BBB,52\n"
+        "2024-01-08,BBB,53\n",
+        encoding="utf-8",
+    )
+    cli_output_directory = tmp_path / "cli_outputs"
+    cli_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "market_risk_baseline",
+            "--provider",
+            "csv",
+            "--csv-path",
+            str(csv_path),
+            "--tickers",
+            "AAA",
+            "BBB",
+            "--start-date",
+            "2024-01-01",
+            "--end-date",
+            "2024-02-01",
+            "--rolling-window",
+            "3",
+            "--output-dir",
+            str(cli_output_directory),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert cli_result.returncode == 0, cli_result.stdout + cli_result.stderr
+    assert (cli_output_directory / "return_summary.csv").is_file()
+    assert (cli_output_directory / "data_quality_report.json").is_file()
+    assert (cli_output_directory / "run_manifest.json").is_file()
 
     installed_tests = tmp_path / "installed_tests"
     nested_pytest_temp = tmp_path / "nested_pytest_temp"

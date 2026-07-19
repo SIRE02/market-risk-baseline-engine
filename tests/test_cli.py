@@ -12,7 +12,6 @@ from market_risk_baseline import cli
 from market_risk_baseline.config import AnalysisConfig
 from market_risk_baseline.data_loader import MarketDataError
 
-
 EXPECTED_CSV_ARTIFACTS = {
     "adjusted_prices.csv",
     "simple_returns.csv",
@@ -88,12 +87,13 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
     assert manifest["data_source"]["provider"] == "csv"
     assert manifest["data_source"]["source"] == str(csv_path.resolve())
     assert manifest["data_source"]["observation_count"] == len(prices)
-    assert manifest["estimation_conventions"]["sample_estimators"][
-        "covariance_ddof"
-    ] == 1
-    assert manifest["estimation_conventions"]["rolling"][
-        "future_observations_used"
-    ] is False
+    assert (
+        manifest["estimation_conventions"]["sample_estimators"]["covariance_ddof"] == 1
+    )
+    assert (
+        manifest["estimation_conventions"]["rolling"]["future_observations_used"]
+        is False
+    )
     distribution = manifest["estimation_conventions"]["return_distribution"]
     assert distribution["quantiles"] == [0.05, 0.25, 0.75, 0.95]
     assert distribution["quantile_method"] == "linear"

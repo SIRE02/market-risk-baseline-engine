@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
-import json
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +52,11 @@ def validate_configuration(
         raise ValueError("START_DATE and END_DATE must use YYYY-MM-DD format.") from exc
     if start >= end:
         raise ValueError("START_DATE must be earlier than END_DATE.")
-    if isinstance(rolling_window, bool) or not isinstance(rolling_window, int) or rolling_window <= 0:
+    if (
+        isinstance(rolling_window, bool)
+        or not isinstance(rolling_window, int)
+        or rolling_window <= 0
+    ):
         raise ValueError("ROLLING_WINDOW must be a positive integer.")
     return normalized
 
@@ -73,7 +77,8 @@ def normalize_and_validate(
     missing_columns = [column for column in CANONICAL_COLUMNS if column not in records]
     if missing_columns:
         raise MarketDataError(
-            "Provider data is missing canonical column(s): " + ", ".join(missing_columns)
+            "Provider data is missing canonical column(s): "
+            + ", ".join(missing_columns)
         )
 
     data = records.loc[:, list(CANONICAL_COLUMNS)].copy()
@@ -88,7 +93,9 @@ def normalize_and_validate(
 
     start = pd.Timestamp(config.start_date)
     end = pd.Timestamp(config.end_date)
-    data = data.loc[data["date"].notna() & (data["date"] >= start) & (data["date"] < end)]
+    data = data.loc[
+        data["date"].notna() & (data["date"] >= start) & (data["date"] < end)
+    ]
     duplicate_rows = int(data.duplicated(subset=["date", "ticker"], keep="last").sum())
     data = data.drop_duplicates(subset=["date", "ticker"], keep="last")
 
@@ -100,22 +107,29 @@ def normalize_and_validate(
     data["adjusted_close"] = numeric_prices.mask(nonpositive_prices)
     data = data.sort_values(["date", "ticker"]).reset_index(drop=True)
 
-    returned = sorted(data.loc[data["adjusted_close"].notna(), "ticker"].unique().tolist())
+    returned = sorted(
+        data.loc[data["adjusted_close"].notna(), "ticker"].unique().tolist()
+    )
     unusable = [ticker for ticker in requested if ticker not in returned]
     if unusable:
         raise MarketDataError(
-            "No usable adjusted-price data was returned for: " + ", ".join(unusable) + "."
+            "No usable adjusted-price data was returned for: "
+            + ", ".join(unusable)
+            + "."
         )
 
     wide = data.pivot(index="date", columns="ticker", values="adjusted_close")
     wide = wide.reindex(columns=requested).sort_index()
     aligned = wide.dropna(how="any")
-    minimum_prices = config.rolling_min_observations + 1
+    rolling_minimum = config.rolling_min_observations
+    # AnalysisConfig resolves this during validation.
+    assert rolling_minimum is not None
+    minimum_prices = rolling_minimum + 1
     if len(aligned) < minimum_prices:
         raise MarketDataError(
             "Insufficient common price history: "
             f"need at least {minimum_prices} aligned prices for "
-            f"ROLLING_MIN_OBSERVATIONS={config.rolling_min_observations}, "
+            f"ROLLING_MIN_OBSERVATIONS={rolling_minimum}, "
             f"but received {len(aligned)}."
         )
     aligned.columns.name = None

@@ -55,9 +55,9 @@ def rolling_covariance(
     minimum = validate_rolling_sample(
         len(aligned), rolling_window, rolling_min_observations
     )
-    result = aligned.rolling(
-        window=rolling_window, min_periods=minimum
-    ).cov(pairwise=True, ddof=SAMPLE_DDOF)
+    result = aligned.rolling(window=rolling_window, min_periods=minimum).cov(
+        pairwise=True, ddof=SAMPLE_DDOF
+    )
     result.index.names = [aligned.index.name or "date", "ticker"]
     return result
 
@@ -72,9 +72,9 @@ def rolling_correlation(
     minimum = validate_rolling_sample(
         len(aligned), rolling_window, rolling_min_observations
     )
-    result = aligned.rolling(
-        window=rolling_window, min_periods=minimum
-    ).corr(pairwise=True)
+    result = aligned.rolling(window=rolling_window, min_periods=minimum).corr(
+        pairwise=True
+    )
     result.index.names = [aligned.index.name or "date", "ticker"]
     return result
 
@@ -84,13 +84,19 @@ def extreme_correlation_pairs(
 ) -> tuple[tuple[str, str, float], tuple[str, str, float]]:
     """Return the highest and lowest unique off-diagonal asset pairs."""
     if correlations.shape[0] < 2 or correlations.shape[0] != correlations.shape[1]:
-        raise ValueError("A square correlation matrix with at least two assets is required.")
+        raise ValueError(
+            "A square correlation matrix with at least two assets is required."
+        )
     mask = np.triu(np.ones(correlations.shape, dtype=bool), k=1)
     pairs = correlations.where(mask).stack()
     if pairs.empty:
         raise ValueError("No off-diagonal correlation pairs are available.")
     highest_pair = pairs.idxmax()
     lowest_pair = pairs.idxmin()
-    highest = (str(highest_pair[0]), str(highest_pair[1]), float(pairs.loc[highest_pair]))
+    highest = (
+        str(highest_pair[0]),
+        str(highest_pair[1]),
+        float(pairs.loc[highest_pair]),
+    )
     lowest = (str(lowest_pair[0]), str(lowest_pair[1]), float(pairs.loc[lowest_pair]))
     return highest, lowest

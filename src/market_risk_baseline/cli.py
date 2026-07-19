@@ -38,7 +38,9 @@ from market_risk_baseline.visualizations import (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="market-risk-baseline",
-        description="Analyze validated adjusted daily prices from Yahoo or a local CSV.",
+        description=(
+            "Analyze validated adjusted daily prices from Yahoo or a local CSV."
+        ),
     )
     parser.add_argument("--config", type=Path, help="TOML or JSON configuration file")
     parser.add_argument("--provider", choices=("yahoo", "csv"))
@@ -194,7 +196,10 @@ def run_analysis(
     print(correlations.to_string(float_format=lambda value: f"{value:.3f}"))
     print(f"\nHighest pair: {highest[0]} / {highest[1]} ({highest[2]:.3f})")
     print(f"Lowest pair:  {lowest[0]} / {lowest[1]} ({lowest[2]:.3f})")
-    print(f"\nSaved tables, charts, quality report, and manifest to: {output_dir.resolve()}")
+    print(
+        "\nSaved tables, charts, quality report, and manifest to: "
+        f"{output_dir.resolve()}"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> None:
