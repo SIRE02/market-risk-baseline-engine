@@ -33,16 +33,23 @@ def test_extract_adjusted_close_never_falls_back_to_raw_close() -> None:
 
 def test_clean_prices_sorts_deduplicates_converts_and_drops_missing_dates() -> None:
     dates = pd.to_datetime(
-        ["2024-01-05", "2024-01-03", "2024-01-03", "2024-01-04", "2024-01-08"]
+        [
+            "2024-01-05",
+            "2024-01-03",
+            "2024-01-03",
+            "2024-01-04",
+            "2024-01-08",
+            "2024-01-09",
+        ]
     )
     raw = pd.DataFrame(
         {
-            "AAA": ["103", "100", "101", "102", "104"],
-            "BBB": ["53", "50", "51", None, "54"],
+            "AAA": ["103", "100", "101", "102", "104", "105"],
+            "BBB": ["53", "50", "51", None, "54", "55"],
         },
         index=dates,
     )
-    cleaned = clean_adjusted_prices(raw, ["AAA", "BBB"], rolling_window=1)
+    cleaned = clean_adjusted_prices(raw, ["AAA", "BBB"], rolling_window=2)
     assert cleaned.index.is_monotonic_increasing
     assert cleaned.index.is_unique
     assert not cleaned.isna().any(axis=None)
@@ -55,6 +62,6 @@ def test_clean_prices_reports_invalid_ticker_and_insufficient_history() -> None:
     missing = pd.DataFrame({"AAA": range(5), "BBB": [None] * 5}, index=dates)
     with pytest.raises(MarketDataError, match="BBB"):
         clean_adjusted_prices(missing, ["AAA", "BBB"], rolling_window=2)
-    short = pd.DataFrame({"AAA": [1, 2, 3], "BBB": [2, 3, 4]}, index=dates[:3])
+    short = pd.DataFrame({"AAA": [1, 2], "BBB": [2, 3]}, index=dates[:2])
     with pytest.raises(MarketDataError, match="Insufficient common price history"):
         clean_adjusted_prices(short, ["AAA", "BBB"], rolling_window=2)

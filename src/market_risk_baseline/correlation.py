@@ -1,9 +1,16 @@
-"""Complete-case Pearson correlation calculations."""
+"""Complete-case covariance and Pearson correlation estimators."""
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+from market_risk_baseline.estimation import (
+    DEFAULT_ROLLING_WINDOW,
+    MINIMUM_SAMPLE_OBSERVATIONS,
+    SAMPLE_DDOF,
+    validate_rolling_sample,
+)
 
 
 def align_returns(log_returns: pd.DataFrame) -> pd.DataFrame:
@@ -17,8 +24,59 @@ def align_returns(log_returns: pd.DataFrame) -> pd.DataFrame:
 
 
 def correlation_matrix(log_returns: pd.DataFrame) -> pd.DataFrame:
-    """Calculate a Pearson correlation matrix from aligned log returns."""
-    return align_returns(log_returns).corr(method="pearson")
+    """Calculate Pearson correlation from complete-case daily log returns."""
+    aligned = _dependence_sample(log_returns)
+    return aligned.corr(method="pearson")
+
+
+def covariance_matrix(log_returns: pd.DataFrame) -> pd.DataFrame:
+    """Calculate the sample covariance matrix (ddof=1) of daily log returns."""
+    aligned = _dependence_sample(log_returns)
+    return aligned.cov(ddof=SAMPLE_DDOF)
+
+
+def _dependence_sample(log_returns: pd.DataFrame) -> pd.DataFrame:
+    aligned = align_returns(log_returns)
+    if len(aligned) < MINIMUM_SAMPLE_OBSERVATIONS:
+        raise ValueError(
+            "At least two complete return observations are required for "
+            "dependence estimation."
+        )
+    return aligned
+
+
+def rolling_covariance(
+    log_returns: pd.DataFrame,
+    rolling_window: int = DEFAULT_ROLLING_WINDOW,
+    rolling_min_observations: int | None = None,
+) -> pd.DataFrame:
+    """Calculate trailing sample covariance without using future observations."""
+    aligned = align_returns(log_returns)
+    minimum = validate_rolling_sample(
+        len(aligned), rolling_window, rolling_min_observations
+    )
+    result = aligned.rolling(
+        window=rolling_window, min_periods=minimum
+    ).cov(pairwise=True, ddof=SAMPLE_DDOF)
+    result.index.names = [aligned.index.name or "date", "ticker"]
+    return result
+
+
+def rolling_correlation(
+    log_returns: pd.DataFrame,
+    rolling_window: int = DEFAULT_ROLLING_WINDOW,
+    rolling_min_observations: int | None = None,
+) -> pd.DataFrame:
+    """Calculate trailing Pearson correlation without future observations."""
+    aligned = align_returns(log_returns)
+    minimum = validate_rolling_sample(
+        len(aligned), rolling_window, rolling_min_observations
+    )
+    result = aligned.rolling(
+        window=rolling_window, min_periods=minimum
+    ).corr(pairwise=True)
+    result.index.names = [aligned.index.name or "date", "ticker"]
+    return result
 
 
 def extreme_correlation_pairs(
@@ -36,4 +94,3 @@ def extreme_correlation_pairs(
     highest = (str(highest_pair[0]), str(highest_pair[1]), float(pairs.loc[highest_pair]))
     lowest = (str(lowest_pair[0]), str(lowest_pair[1]), float(pairs.loc[lowest_pair]))
     return highest, lowest
-

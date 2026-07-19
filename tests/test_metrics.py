@@ -41,7 +41,7 @@ def test_return_calculations_are_vectorized_and_finite(prices: pd.DataFrame) -> 
 
 def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> None:
     log = calculate_log_returns(prices)
-    summary = volatility_summary(log, trading_days=252)
+    summary = volatility_summary(log, observations_per_year=252)
     expected_daily = log.std(ddof=1)
     pd.testing.assert_series_equal(summary["daily_volatility"], expected_daily, check_names=False)
     np.testing.assert_allclose(
@@ -52,12 +52,33 @@ def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> No
 
 def test_rolling_window_validation_and_values(prices: pd.DataFrame) -> None:
     log = calculate_log_returns(prices)
-    rolling = rolling_volatility(log, rolling_window=3, trading_days=252)
+    rolling = rolling_volatility(
+        log, rolling_window=3, observations_per_year=252
+    )
     assert rolling.iloc[:2].isna().all(axis=None)
     expected = log.iloc[:3].std(ddof=1) * np.sqrt(252)
     np.testing.assert_allclose(rolling.iloc[2], expected)
-    with pytest.raises(ValueError, match="must be smaller"):
-        rolling_volatility(log, rolling_window=len(log), trading_days=252)
+    with pytest.raises(ValueError, match="Insufficient return observations"):
+        rolling_volatility(
+            log.iloc[:2],
+            rolling_window=3,
+            observations_per_year=252,
+        )
+
+
+def test_rolling_volatility_supports_incomplete_initial_windows(
+    prices: pd.DataFrame,
+) -> None:
+    log = calculate_log_returns(prices)
+    rolling = rolling_volatility(
+        log,
+        rolling_window=4,
+        observations_per_year=252,
+        rolling_min_observations=2,
+    )
+    assert rolling.iloc[0].isna().all()
+    expected = log.iloc[:2].std(ddof=1) * np.sqrt(252)
+    np.testing.assert_allclose(rolling.iloc[1], expected)
 
 
 def test_correlations_satisfy_mathematical_expectations(prices: pd.DataFrame) -> None:

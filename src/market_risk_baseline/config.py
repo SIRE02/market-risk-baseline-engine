@@ -10,14 +10,22 @@ from pathlib import Path
 import tomllib
 from typing import Any
 
+from market_risk_baseline.estimation import (
+    DEFAULT_OBSERVATIONS_PER_YEAR,
+    DEFAULT_ROLLING_WINDOW,
+    resolve_rolling_min_observations,
+    validate_positive_integer,
+)
+
 
 DEFAULT_CONFIGURATION: dict[str, Any] = {
     "provider": "yahoo",
     "tickers": ["SPY", "QQQ", "TLT", "GLD"],
     "start_date": "2020-01-01",
     "end_date": "2025-01-01",
-    "rolling_window": 21,
-    "trading_days": 252,
+    "rolling_window": DEFAULT_ROLLING_WINDOW,
+    "rolling_min_observations": None,
+    "observations_per_year": DEFAULT_OBSERVATIONS_PER_YEAR,
     "output_dir": "outputs",
     "csv_path": None,
 }
@@ -31,8 +39,9 @@ class AnalysisConfig:
     tickers: tuple[str, ...] = ("SPY", "QQQ", "TLT", "GLD")
     start_date: str = "2020-01-01"
     end_date: str = "2025-01-01"
-    rolling_window: int = 21
-    trading_days: int = 252
+    rolling_window: int = DEFAULT_ROLLING_WINDOW
+    rolling_min_observations: int | None = None
+    observations_per_year: int = DEFAULT_OBSERVATIONS_PER_YEAR
     output_dir: Path = Path("outputs")
     csv_path: Path | None = None
 
@@ -59,8 +68,12 @@ class AnalysisConfig:
         if start >= end:
             raise ValueError("START_DATE must be earlier than END_DATE.")
 
-        _positive_integer(self.rolling_window, "ROLLING_WINDOW")
-        _positive_integer(self.trading_days, "TRADING_DAYS")
+        rolling_min_observations = resolve_rolling_min_observations(
+            self.rolling_window, self.rolling_min_observations
+        )
+        validate_positive_integer(
+            self.observations_per_year, "OBSERVATIONS_PER_YEAR"
+        )
 
         output_dir = Path(self.output_dir).expanduser()
         if not str(output_dir).strip():
@@ -76,6 +89,9 @@ class AnalysisConfig:
 
         object.__setattr__(self, "provider", provider)
         object.__setattr__(self, "tickers", symbols)
+        object.__setattr__(
+            self, "rolling_min_observations", rolling_min_observations
+        )
         object.__setattr__(self, "output_dir", output_dir)
         object.__setattr__(self, "csv_path", csv_path)
 
@@ -86,11 +102,6 @@ class AnalysisConfig:
         values["output_dir"] = str(self.output_dir)
         values["csv_path"] = str(self.csv_path) if self.csv_path is not None else None
         return values
-
-
-def _positive_integer(value: object, name: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"{name} must be a positive integer.")
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:

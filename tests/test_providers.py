@@ -94,7 +94,7 @@ def test_quality_report_counts_duplicates_invalid_prices_and_alignment() -> None
         tickers=("AAA", "BBB"),
         start_date="2024-01-01",
         end_date="2024-02-01",
-        rolling_window=1,
+        rolling_window=2,
     )
     prices, _normalized, quality = normalize_and_validate(records, config)
 
@@ -115,7 +115,7 @@ def test_csv_schema_is_strict_and_yahoo_errors_do_not_fallback(tmp_path: Path) -
         tickers=("AAA", "BBB"),
         start_date="2024-01-01",
         end_date="2024-02-01",
-        rolling_window=1,
+        rolling_window=2,
     )
     payload = CSVProvider().acquire(config)
     with pytest.raises(MarketDataError, match="canonical column"):
@@ -144,3 +144,18 @@ def test_persisted_yahoo_acquisition_is_reusable_as_csv(tmp_path: Path) -> None:
     reloaded = load_market_data(config, CSVProvider()).prices
 
     pd.testing.assert_frame_equal(reloaded, prices.rename_axis("date"), check_freq=False)
+
+
+def test_configured_rolling_minimum_controls_the_history_gate() -> None:
+    records = _canonical(_prices().iloc[:3])
+    config = AnalysisConfig(
+        tickers=("AAA", "BBB"),
+        start_date="2024-01-01",
+        end_date="2024-02-01",
+        rolling_window=5,
+        rolling_min_observations=2,
+    )
+
+    prices, _normalized, _quality = normalize_and_validate(records, config)
+
+    assert len(prices) == 3

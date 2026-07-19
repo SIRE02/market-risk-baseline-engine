@@ -1,6 +1,6 @@
 # Market-Risk-Baseline-Engine
 
-A Python pipeline that validates adjusted daily prices from Yahoo Finance or a local CSV and produces simple returns, log returns, daily and annualized volatility, rolling volatility, and multi-asset Pearson correlations.
+A Python pipeline that validates adjusted daily prices from Yahoo Finance or a local CSV and produces returns, volatility, covariance, and Pearson-correlation estimates using explicit statistical conventions.
 
 ## What it produces
 
@@ -12,8 +12,11 @@ Running the installed `market-risk-baseline` command creates these files in `out
 - `return_summary.csv`
 - `volatility_summary.csv`
 - `rolling_volatility.csv`
+- `covariance_matrix.csv`
+- `rolling_covariance.csv`
 - `rolling_volatility.png`
 - `correlation_matrix.csv`
+- `rolling_correlation.csv`
 - `correlation_heatmap.png`
 - `data_quality_report.json`
 - `run_manifest.json`
@@ -41,7 +44,7 @@ python -m pip install -e .
 
 ## Configure and run
 
-Version `0.1.2` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
+Version `0.1.3` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
 
 ```powershell
 conda run -n market-risk-baseline-engine market-risk-baseline --config config.example.toml
@@ -56,10 +59,12 @@ conda run -n market-risk-baseline-engine market-risk-baseline `
   --start-date 2021-01-01 `
   --end-date 2025-01-01 `
   --rolling-window 30 `
+  --rolling-min-observations 20 `
+  --observations-per-year 252 `
   --output-dir outputs/alternate
 ```
 
-Run `market-risk-baseline --help` for every option. Supported keys are `provider`, `tickers`, `start_date`, `end_date`, `rolling_window`, `trading_days`, `output_dir`, and `csv_path`. TOML may put them under `[analysis]`; JSON uses a top-level object (or an `analysis` object). Command-line overrides have highest priority, followed by the file and built-in defaults.
+Run `market-risk-baseline --help` for every option. Supported keys are `provider`, `tickers`, `start_date`, `end_date`, `rolling_window`, `rolling_min_observations`, `observations_per_year`, `output_dir`, and `csv_path`. TOML may put them under `[analysis]`; JSON uses a top-level object (or an `analysis` object). Command-line overrides have highest priority, followed by the file and built-in defaults.
 
 Both providers treat `end_date` as exclusive. For example, `2025-01-01` includes observations before January 1, 2025, but not that date.
 
@@ -92,7 +97,7 @@ date,ticker,adjusted_close
 2024-01-03,QQQ,405.274
 ```
 
-Do not put raw closes in `adjusted_close`. The engine cannot infer or reconstruct split/dividend adjustments and deliberately refuses Yahoo responses without `Adj Close`. Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. A run needs at least `rolling_window + 2` common adjusted-price observations.
+Do not put raw closes in `adjusted_close`. The engine cannot infer or reconstruct split/dividend adjustments and deliberately refuses Yahoo responses without `Adj Close`. Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. A run needs at least `rolling_min_observations + 1` common adjusted-price observations so the price series yields the configured minimum number of returns.
 
 `outputs/acquired_adjusted_prices.csv` from a successful Yahoo run follows this schema and can be passed later with `--provider csv --csv-path ...`.
 
@@ -100,7 +105,7 @@ Do not put raw closes in `adjusted_close`. The engine cannot infer or reconstruc
 
 `data_quality_report.json` records requested and returned instruments, actual first and last common dates, per-instrument observation counts, missing values, duplicate date/instrument rows, invalid prices, and the reduction caused by common-history alignment.
 
-`run_manifest.json` records the package version, Git commit when available, execution timestamp, complete effective configuration, actual provider and source, acquisition/read time, actual input range, instruments, dependency versions, and generated artifacts. A CSV run records the resolved source path and file modification time. These files describe the data actually analyzed, not merely what was requested.
+`run_manifest.json` records the package version, Git commit when available, execution timestamp, complete effective configuration, actual provider and source, acquisition/read time, actual input range, instruments, dependency versions, generated artifacts, and machine-readable estimation conventions. A CSV run records the resolved source path and file modification time. These files describe the data actually analyzed, not merely what was requested.
 
 ## Yahoo and yfinance limitations
 
@@ -110,30 +115,37 @@ The Yahoo adapter pins `yfinance` and explicitly requests `Adj Close` with `auto
 
 ## Tests
 
-The automated tests use deterministic synthetic prices and saved provider-shaped responses; they do not require network access. They include Yahoo/CSV equivalence, quality-report checks, a wheel build, isolated-target installation, package import, entry-point check, and an offline complete-analysis test:
+The automated tests use deterministic synthetic prices and saved provider-shaped responses; they do not require network access. They include Yahoo/CSV equivalence, hand-calculated covariance, symmetry and positive-semidefinite checks, rolling boundary and no-look-ahead checks, constant-series behavior, quality-report checks, a wheel build, isolated-target installation, package import, entry-point check, and an offline complete-analysis test:
 
 ```powershell
 conda run -n market-risk-baseline-engine python -m pytest -q
 ```
 
-They verify that returns have fewer rows than prices, contain no infinities, volatility is non-negative, correlations stay in `[-1, 1]`, correlation diagonals equal one, complete-case aligned returns contain no missing data, and invalid rolling windows fail clearly.
+They verify that returns have fewer rows than prices, contain no infinities, volatility is non-negative, covariance is symmetric and positive semidefinite within numerical tolerance, correlations stay in `[-1, 1]`, rolling outputs never use future observations, complete-case aligned returns contain no missing data, and invalid or insufficient rolling samples fail clearly.
 
-## Calculation notes
+## Estimation conventions
 
-- Simple return: `P(t) / P(t-1) - 1`
-- Log return: `log(P(t) / P(t-1))`
-- Daily volatility: sample standard deviation of daily log returns with `ddof=1`
-- Annualized volatility: daily volatility multiplied by `sqrt(252)`
-- Rolling volatility: rolling sample standard deviation multiplied by `sqrt(252)`
-- Correlation: Pearson correlation of complete-case aligned log returns
+| Output or metric | Return input | Estimator and scaling |
+| --- | --- | --- |
+| `simple_returns.csv` | Adjusted prices | `P(t) / P(t-1) - 1`; reported as a separate transformation, not used by the current estimators. |
+| Log returns and return summary | Adjusted prices / log returns | `log(P(t) / P(t-1))`; mean uses the available sample, standard deviation is sample-based with `ddof=1`. |
+| Daily volatility | Log returns | Sample standard deviation with `ddof=1`. |
+| Annualized volatility | Log returns | Daily sample volatility multiplied by `sqrt(observations_per_year)`. |
+| Covariance matrix | Complete-case log returns | Daily sample covariance with `ddof=1`; it is not annualized. |
+| Pearson correlation | Complete-case log returns | Sample-centered Pearson correlation. It is undefined (`NaN`) for a constant series. |
+| Rolling volatility/covariance/correlation | Log returns | The same estimator as its full-sample counterpart over a trailing window. |
 
-The 252-day convention and square-root-of-time scaling are standard baseline approximations. Correlation describes linear comovement, does not establish causation, and can change across sample periods. Returns are usually more suitable than prices for statistical analysis, but are not guaranteed to be stationary.
+No current dispersion or covariance output uses a population estimator (`ddof=0`). `observations_per_year` defaults to 252 and is configurable; it affects volatility annualization only. Square-root-of-time annualization is a baseline approximation, not a universal law.
+
+Rolling windows are backward-looking, include the current observation, and never use future rows. `rolling_min_observations` defaults to `rolling_window`, which leaves the first `window - 1` estimates as `NaN`. If the configured minimum is smaller than the window, estimates begin at that minimum using an incomplete trailing window. At least two observations are required, the minimum cannot exceed the window, and a sample shorter than the minimum fails explicitly.
+
+Cross-asset covariance and correlation use complete-case alignment. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. Correlation describes linear comovement, does not establish causation, and can change across sample periods. These outputs are historical descriptions rather than forecasts.
 
 ## Error handling
 
-The program reports invalid configuration, date ranges, output/source paths, rolling windows, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, insufficient common history, and empty return matrices with readable messages.
+The program reports invalid configuration, date ranges, output/source paths, rolling windows and minimum observations, annualization settings, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, insufficient common history, and insufficient return samples with readable messages.
 
-Potential future additions include cumulative returns, drawdowns, rolling pairwise correlation, a small interface, and additional risk metrics. Forecasting, VaR, portfolio optimization, machine learning, live feeds, automated trading, and complex infrastructure remain intentionally out of scope for version one.
+Potential future additions include cumulative returns, drawdowns, a small interface, and additional risk metrics. Forecasting, VaR, portfolio optimization, machine learning, live feeds, automated trading, and complex infrastructure remain intentionally out of scope for version one.
 
 ## License
 

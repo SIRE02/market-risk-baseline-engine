@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from market_risk_baseline.config import AnalysisConfig, load_configuration
-from market_risk_baseline.correlation import correlation_matrix, extreme_correlation_pairs
+from market_risk_baseline.correlation import (
+    correlation_matrix,
+    covariance_matrix,
+    extreme_correlation_pairs,
+    rolling_correlation,
+    rolling_covariance,
+)
 from market_risk_baseline.data_loader import (
     MarketDataError,
     load_market_data,
@@ -44,7 +50,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")
     parser.add_argument("--rolling-window", type=int)
-    parser.add_argument("--trading-days", type=int)
+    parser.add_argument("--rolling-min-observations", type=int)
+    parser.add_argument("--observations-per-year", type=int)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--csv-path", type=Path)
     return parser
@@ -65,7 +72,8 @@ def _configuration_from_args(arguments: argparse.Namespace) -> AnalysisConfig:
         "start_date": arguments.start_date,
         "end_date": arguments.end_date,
         "rolling_window": arguments.rolling_window,
-        "trading_days": arguments.trading_days,
+        "rolling_min_observations": arguments.rolling_min_observations,
+        "observations_per_year": arguments.observations_per_year,
         "output_dir": arguments.output_dir,
         "csv_path": arguments.csv_path,
     }
@@ -88,11 +96,21 @@ def run_analysis(
     simple_returns = calculate_simple_returns(prices)
     log_returns = calculate_log_returns(prices)
     return_summary = summarize_returns(log_returns)
-    vol_summary = volatility_summary(log_returns, config.trading_days)
+    vol_summary = volatility_summary(log_returns, config.observations_per_year)
     rolling = rolling_volatility(
-        log_returns, config.rolling_window, config.trading_days
+        log_returns,
+        config.rolling_window,
+        config.observations_per_year,
+        config.rolling_min_observations,
     )
+    covariances = covariance_matrix(log_returns)
     correlations = correlation_matrix(log_returns)
+    rolling_covariances = rolling_covariance(
+        log_returns, config.rolling_window, config.rolling_min_observations
+    )
+    rolling_correlations = rolling_correlation(
+        log_returns, config.rolling_window, config.rolling_min_observations
+    )
     highest, lowest = extreme_correlation_pairs(correlations)
 
     output_dir = config.output_dir
@@ -104,7 +122,10 @@ def run_analysis(
         "return_summary.csv",
         "volatility_summary.csv",
         "rolling_volatility.csv",
+        "covariance_matrix.csv",
         "correlation_matrix.csv",
+        "rolling_covariance.csv",
+        "rolling_correlation.csv",
         "rolling_volatility.png",
         "correlation_heatmap.png",
         "data_quality_report.json",
@@ -116,7 +137,14 @@ def run_analysis(
     return_summary.to_csv(output_dir / "return_summary.csv")
     vol_summary.to_csv(output_dir / "volatility_summary.csv")
     rolling.to_csv(output_dir / "rolling_volatility.csv", index_label="date")
+    covariances.to_csv(output_dir / "covariance_matrix.csv")
     correlations.to_csv(output_dir / "correlation_matrix.csv")
+    rolling_covariances.to_csv(
+        output_dir / "rolling_covariance.csv", index_label=["date", "ticker"]
+    )
+    rolling_correlations.to_csv(
+        output_dir / "rolling_correlation.csv", index_label=["date", "ticker"]
+    )
     plot_rolling_volatility(
         rolling, output_dir / "rolling_volatility.png", config.rolling_window
     )

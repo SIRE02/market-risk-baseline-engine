@@ -110,12 +110,13 @@ def normalize_and_validate(
     wide = data.pivot(index="date", columns="ticker", values="adjusted_close")
     wide = wide.reindex(columns=requested).sort_index()
     aligned = wide.dropna(how="any")
-    minimum_prices = config.rolling_window + 2
+    minimum_prices = config.rolling_min_observations + 1
     if len(aligned) < minimum_prices:
         raise MarketDataError(
             "Insufficient common price history: "
-            f"need at least {minimum_prices} aligned prices for a "
-            f"{config.rolling_window}-day window, but received {len(aligned)}."
+            f"need at least {minimum_prices} aligned prices for "
+            f"ROLLING_MIN_OBSERVATIONS={config.rolling_min_observations}, "
+            f"but received {len(aligned)}."
         )
     aligned.columns.name = None
     aligned.index.name = "date"

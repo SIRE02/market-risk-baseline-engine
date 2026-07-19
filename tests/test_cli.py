@@ -20,7 +20,10 @@ EXPECTED_CSV_ARTIFACTS = {
     "return_summary.csv",
     "volatility_summary.csv",
     "rolling_volatility.csv",
+    "covariance_matrix.csv",
     "correlation_matrix.csv",
+    "rolling_covariance.csv",
+    "rolling_correlation.csv",
     "rolling_volatility.png",
     "correlation_heatmap.png",
     "data_quality_report.json",
@@ -85,6 +88,12 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
     assert manifest["data_source"]["provider"] == "csv"
     assert manifest["data_source"]["source"] == str(csv_path.resolve())
     assert manifest["data_source"]["observation_count"] == len(prices)
+    assert manifest["estimation_conventions"]["sample_estimators"][
+        "covariance_ddof"
+    ] == 1
+    assert manifest["estimation_conventions"]["rolling"][
+        "future_observations_used"
+    ] is False
     assert "data_quality_report.json" in manifest["generated_artifacts"]
 
 
@@ -113,6 +122,10 @@ rolling_window = 10
             "GLD,TLT",
             "--rolling-window",
             "5",
+            "--rolling-min-observations",
+            "3",
+            "--observations-per-year",
+            "260",
             "--output-dir",
             str(tmp_path / "out"),
         ]
@@ -120,6 +133,8 @@ rolling_window = 10
 
     assert captured[0].tickers == ("GLD", "TLT")
     assert captured[0].rolling_window == 5
+    assert captured[0].rolling_min_observations == 3
+    assert captured[0].observations_per_year == 260
     assert captured[0].start_date == "2023-01-01"
 
 

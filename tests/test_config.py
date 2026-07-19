@@ -20,6 +20,8 @@ def test_json_configuration_is_normalized_and_overridden(tmp_path: Path) -> None
                 "start_date": "2023-01-01",
                 "end_date": "2024-01-01",
                 "rolling_window": 20,
+                "rolling_min_observations": 4,
+                "observations_per_year": 260,
             }
         ),
         encoding="utf-8",
@@ -27,6 +29,8 @@ def test_json_configuration_is_normalized_and_overridden(tmp_path: Path) -> None
     config = load_configuration(config_path, {"rolling_window": 5})
     assert config.tickers == ("SPY", "QQQ")
     assert config.rolling_window == 5
+    assert config.rolling_min_observations == 4
+    assert config.observations_per_year == 260
 
 
 def test_csv_configuration_requires_an_existing_source(tmp_path: Path) -> None:
@@ -51,5 +55,17 @@ def test_unknown_options_and_invalid_core_values_fail_early(tmp_path: Path) -> N
             start_date="2025-01-01",
             end_date="2024-01-01",
         )
-    with pytest.raises(ValueError, match="TRADING_DAYS"):
-        AnalysisConfig(tickers=("AAA", "BBB"), trading_days=0)
+    with pytest.raises(ValueError, match="OBSERVATIONS_PER_YEAR"):
+        AnalysisConfig(tickers=("AAA", "BBB"), observations_per_year=0)
+    with pytest.raises(ValueError, match="must not exceed"):
+        AnalysisConfig(
+            tickers=("AAA", "BBB"),
+            rolling_window=5,
+            rolling_min_observations=6,
+        )
+
+
+def test_rolling_minimum_defaults_to_full_window() -> None:
+    config = AnalysisConfig(tickers=("AAA", "BBB"), rolling_window=7)
+    assert config.rolling_min_observations == 7
+    assert config.observations_per_year == 252

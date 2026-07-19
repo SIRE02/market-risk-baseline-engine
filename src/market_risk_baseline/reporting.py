@@ -12,6 +12,7 @@ from typing import Any
 from market_risk_baseline import __version__
 from market_risk_baseline.config import AnalysisConfig
 from market_risk_baseline.data_loader import MarketDataResult
+from market_risk_baseline.estimation import estimation_conventions
 
 
 def _dependency_versions() -> dict[str, str]:
@@ -51,6 +52,11 @@ def build_run_manifest(
         "git_commit": _git_commit(),
         "execution_timestamp": datetime.now(timezone.utc).isoformat(),
         "configuration": config.to_dict(),
+        "estimation_conventions": estimation_conventions(
+            config.observations_per_year,
+            config.rolling_window,
+            config.rolling_min_observations,
+        ),
         "data_source": {
             "provider": market_data.payload.provider,
             "source": market_data.payload.source,
