@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from market_risk_baseline import cli
+from market_risk_baseline import __version__, cli
 from market_risk_baseline.config import AnalysisConfig
 from market_risk_baseline.data_loader import MarketDataError
 
@@ -84,6 +84,8 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
     correlations = pd.read_csv(output_dir / "correlation_matrix.csv", index_col=0)
     assert list(correlations.columns) == list(prices.columns)
     manifest = json.loads((output_dir / "run_manifest.json").read_text())
+    assert manifest["project_version"] == __version__
+    assert manifest["configuration"] == config.to_dict()
     assert manifest["data_source"]["provider"] == "csv"
     assert manifest["data_source"]["source"] == str(csv_path.resolve())
     assert manifest["data_source"]["observation_count"] == len(prices)

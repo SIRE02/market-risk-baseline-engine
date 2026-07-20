@@ -47,5 +47,5 @@ jobs:
           python -m venv "$RUNNER_TEMP/market-risk-clean"
           "$RUNNER_TEMP/market-risk-clean/bin/python" -m pip install dist/*.whl
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/market-risk-clean/bin/python" -c "import market_risk_baseline; assert market_risk_baseline.__version__ == '0.1.5'"
+          "$RUNNER_TEMP/market-risk-clean/bin/python" -c "import market_risk_baseline; assert market_risk_baseline.__version__ == '0.2.0'"
           "$RUNNER_TEMP/market-risk-clean/bin/market-risk-baseline" --help

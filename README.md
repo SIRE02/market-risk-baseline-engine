@@ -44,7 +44,7 @@ python -m pip install -e .
 
 ## Configure and run
 
-Version `0.1.5` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
+Version `0.2.0` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
 
 ```powershell
 conda run -n market-risk-baseline-engine market-risk-baseline --config config.example.toml
