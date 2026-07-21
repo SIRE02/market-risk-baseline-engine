@@ -72,6 +72,9 @@ def build_run_manifest(
             "actual_end_date": quality["last_common_date"],
             "observation_count": quality["common_date_count_after_alignment"],
             "instruments": list(market_data.prices.columns),
+            "canonical_record_stage": (
+                "normalized_requested_in_range_pre_complete_case_alignment"
+            ),
         },
         "dependency_versions": _dependency_versions(),
         "generated_artifacts": sorted(artifacts),

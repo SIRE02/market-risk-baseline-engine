@@ -17,7 +17,7 @@ venv/
 outputs/
 tmp/
 
-# Local documentation
+# Local documentation (not tracked in Git)
 docs/
 
 # Local environment variables

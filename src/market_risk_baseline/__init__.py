@@ -1,11 +1,8 @@
 """Market Risk Baseline Engine package."""
 
-from importlib.metadata import PackageNotFoundError, version
-
-try:
-    __version__ = version("market-risk-baseline-engine")
-except PackageNotFoundError:
-    # The fallback supports direct source-tree use before installation.
-    __version__ = "0.2.0"
+# Keep this source version synchronized with ``project.version`` in pyproject.toml.
+# The clean-wheel packaging test enforces equality with installed distribution
+# metadata. A source constant avoids stale editable-install metadata in manifests.
+__version__ = "0.2.0"
 
 __all__ = ["__version__"]

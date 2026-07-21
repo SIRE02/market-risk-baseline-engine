@@ -83,7 +83,7 @@ def normalize_and_validate(
 
     data = records.loc[:, list(CANONICAL_COLUMNS)].copy()
     source_rows = len(data)
-    raw_missing_prices = int(data["adjusted_close"].isna().sum())
+    source_missing_prices = int(data["adjusted_close"].isna().sum())
     parsed_dates = pd.to_datetime(data["date"], errors="coerce")
     invalid_dates = int(parsed_dates.isna().sum())
     data["date"] = parsed_dates
@@ -100,6 +100,7 @@ def normalize_and_validate(
     data = data.drop_duplicates(subset=["date", "ticker"], keep="last")
 
     source_prices = data["adjusted_close"]
+    scoped_missing_prices = int(source_prices.isna().sum())
     numeric_prices = pd.to_numeric(source_prices, errors="coerce")
     nonnumeric_prices = source_prices.notna() & numeric_prices.isna()
     nonpositive_prices = numeric_prices.notna() & (numeric_prices <= 0)
@@ -121,6 +122,26 @@ def normalize_and_validate(
     wide = data.pivot(index="date", columns="ticker", values="adjusted_close")
     wide = wide.reindex(columns=requested).sort_index()
     aligned = wide.dropna(how="any")
+    union_index = wide.index
+    union_position = {
+        timestamp: position for position, timestamp in enumerate(union_index)
+    }
+    gap_spanning_intervals = [
+        (previous, current)
+        for previous, current in zip(aligned.index, aligned.index[1:], strict=False)
+        if union_position[current] - union_position[previous] != 1
+    ]
+    if gap_spanning_intervals:
+        examples = ", ".join(
+            f"{start.date().isoformat()} to {end.date().isoformat()}"
+            for start, end in gap_spanning_intervals[:3]
+        )
+        raise MarketDataError(
+            "Complete-case alignment would create gap-spanning returns between "
+            "nonconsecutive provider observation dates: "
+            f"{examples}. Missing interior observations must not be treated as "
+            "daily returns."
+        )
     rolling_minimum = config.rolling_min_observations
     # AnalysisConfig resolves this during validation.
     assert rolling_minimum is not None
@@ -135,7 +156,7 @@ def normalize_and_validate(
     aligned.columns.name = None
     aligned.index.name = "date"
 
-    union_dates = int(wide.notna().any(axis=1).sum())
+    union_dates = int(len(union_index))
     instruments: list[dict[str, Any]] = []
     for ticker in requested:
         ticker_rows = data.loc[data["ticker"] == ticker]
@@ -157,7 +178,8 @@ def normalize_and_validate(
         "source_row_count": source_rows,
         "invalid_date_count": invalid_dates,
         "duplicate_date_instrument_rows_removed": duplicate_rows,
-        "missing_adjusted_close_values": raw_missing_prices,
+        "source_missing_adjusted_close_values": source_missing_prices,
+        "missing_adjusted_close_values": scoped_missing_prices,
         "invalid_price_values_removed": invalid_prices,
         "union_date_count_before_alignment": union_dates,
         "common_date_count_after_alignment": int(len(aligned)),
@@ -180,9 +202,13 @@ def load_market_data(
     return MarketDataResult(prices, normalized_records, payload, quality)
 
 
-def persist_acquisition(prices: pd.DataFrame, path: Path) -> None:
-    """Save validated prices in canonical form for explicit later CSV use."""
-    canonical = _canonical_from_wide(prices).loc[:, list(CANONICAL_COLUMNS)]
+def persist_acquisition(records: pd.DataFrame, path: Path) -> None:
+    """Save normalized pre-alignment records for explicit later CSV reuse."""
+    if all(column in records.columns for column in CANONICAL_COLUMNS):
+        canonical = records.loc[:, list(CANONICAL_COLUMNS)].copy()
+    else:
+        canonical = _canonical_from_wide(records).loc[:, list(CANONICAL_COLUMNS)]
+    canonical = canonical.sort_values(["date", "ticker"], kind="stable")
     canonical.to_csv(path, index=False, date_format="%Y-%m-%d")
 
 

@@ -9,6 +9,7 @@ DEFAULT_OBSERVATIONS_PER_YEAR = 252
 DEFAULT_ROLLING_WINDOW = 21
 SAMPLE_DDOF = 1
 MINIMUM_SAMPLE_OBSERVATIONS = SAMPLE_DDOF + 1
+MINIMUM_RETURN_SUMMARY_OBSERVATIONS = 4
 DEFAULT_QUANTILES = (0.05, 0.25, 0.75, 0.95)
 DEFAULT_QUANTILE_METHOD = "linear"
 SUPPORTED_QUANTILE_METHODS = frozenset(
@@ -130,6 +131,15 @@ def estimation_conventions(
                 "0; requires at least 4 observations"
             ),
         },
+        "return_summary": {
+            "minimum_non_missing_observations_per_instrument": (
+                MINIMUM_RETURN_SUMMARY_OBSERVATIONS
+            ),
+            "reason": (
+                "the combined summary includes bias-corrected skewness and "
+                "excess kurtosis"
+            ),
+        },
         "return_distribution": {
             "return_type": "daily_log_return",
             "quantiles": list(quantiles),
@@ -158,5 +168,12 @@ def estimation_conventions(
             ),
             "future_observations_used": False,
         },
-        "missing_data": "complete_case_for_cross_asset_dependence",
+        "missing_data": {
+            "alignment": "complete_case_adjusted_prices",
+            "forward_fill": False,
+            "gap_spanning_return_policy": (
+                "fail_when_retained_complete_case_dates_are_nonconsecutive_within_"
+                "the_provider_observation_union"
+            ),
+        },
     }

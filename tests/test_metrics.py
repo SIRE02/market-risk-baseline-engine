@@ -82,6 +82,13 @@ def test_quantile_interpolation_method_is_applied_and_validated() -> None:
         summarize_returns(returns, quantiles=(0.0, 0.5))
 
 
+def test_distribution_summary_rejects_insufficient_shape_sample() -> None:
+    returns = pd.DataFrame({"AAA": [-0.01, 0.0, 0.01]})
+
+    with pytest.raises(ValueError, match=r"At least 4.*AAA \(3\)"):
+        summarize_returns(returns)
+
+
 def test_volatility_is_sample_based_and_non_negative(prices: pd.DataFrame) -> None:
     log = calculate_log_returns(prices)
     summary = volatility_summary(log, observations_per_year=252)

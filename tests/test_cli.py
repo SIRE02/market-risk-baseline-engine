@@ -11,6 +11,7 @@ import pytest
 from market_risk_baseline import __version__, cli
 from market_risk_baseline.config import AnalysisConfig
 from market_risk_baseline.data_loader import MarketDataError
+from market_risk_baseline.providers import ProviderPayload
 
 EXPECTED_CSV_ARTIFACTS = {
     "adjusted_prices.csv",
@@ -92,9 +93,26 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
     assert (
         manifest["estimation_conventions"]["sample_estimators"]["covariance_ddof"] == 1
     )
+    assert manifest["estimation_conventions"]["return_summary"] == {
+        "minimum_non_missing_observations_per_instrument": 4,
+        "reason": (
+            "the combined summary includes bias-corrected skewness and excess kurtosis"
+        ),
+    }
     assert (
         manifest["estimation_conventions"]["rolling"]["future_observations_used"]
         is False
+    )
+    assert manifest["estimation_conventions"]["missing_data"] == {
+        "alignment": "complete_case_adjusted_prices",
+        "forward_fill": False,
+        "gap_spanning_return_policy": (
+            "fail_when_retained_complete_case_dates_are_nonconsecutive_within_"
+            "the_provider_observation_union"
+        ),
+    }
+    assert manifest["data_source"]["canonical_record_stage"] == (
+        "normalized_requested_in_range_pre_complete_case_alignment"
     )
     distribution = manifest["estimation_conventions"]["return_distribution"]
     assert distribution["quantiles"] == [0.05, 0.25, 0.75, 0.95]
@@ -118,6 +136,73 @@ def test_complete_csv_analysis_writes_reports_and_source_manifest(
         "downside_deviation",
     }.issubset(summary.columns)
     assert "data_quality_report.json" in manifest["generated_artifacts"]
+
+
+def test_yahoo_analysis_persists_normalized_records_before_alignment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prices: pd.DataFrame
+) -> None:
+    records = (
+        prices.rename_axis("date")
+        .reset_index()
+        .melt(id_vars="date", var_name="ticker", value_name="adjusted_close")
+    )
+    missing_date = prices.index[-1]
+    records.loc[
+        (records["date"] == missing_date) & (records["ticker"] == "QQQ"),
+        "adjusted_close",
+    ] = None
+
+    class SavedYahooProvider:
+        name = "yahoo"
+
+        def acquire(self, _config: AnalysisConfig) -> ProviderPayload:
+            return ProviderPayload(
+                records,
+                provider="yahoo",
+                source="saved provider response",
+                acquired_at="2024-02-01T00:00:00+00:00",
+            )
+
+        def normalize(
+            self,
+            payload: ProviderPayload,
+            _requested_tickers: tuple[str, ...],
+        ) -> pd.DataFrame:
+            return payload.data.copy()
+
+    output_dir = tmp_path / "outputs"
+    config = AnalysisConfig(
+        provider="yahoo",
+        output_dir=output_dir,
+        tickers=tuple(prices.columns),
+        start_date="2024-01-01",
+        end_date="2024-02-01",
+        rolling_window=3,
+    )
+    monkeypatch.setattr(
+        cli,
+        "plot_rolling_volatility",
+        lambda _data, path, _window: path.write_bytes(b"test chart"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "plot_correlation_heatmap",
+        lambda _data, path: path.write_bytes(b"test chart"),
+    )
+
+    cli.run_analysis(config, SavedYahooProvider())
+
+    acquisition = pd.read_csv(
+        output_dir / "acquired_adjusted_prices.csv", parse_dates=["date"]
+    )
+    retained = acquisition.loc[
+        (acquisition["date"] == missing_date) & (acquisition["ticker"] == "QQQ"),
+        "adjusted_close",
+    ]
+    assert len(retained) == 1
+    assert retained.isna().all()
+    aligned_prices = pd.read_csv(output_dir / "adjusted_prices.csv", index_col="date")
+    assert len(aligned_prices) == len(prices) - 1
 
 
 def test_cli_arguments_override_configuration_file(

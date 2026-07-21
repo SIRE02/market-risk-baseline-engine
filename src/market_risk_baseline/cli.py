@@ -186,7 +186,10 @@ def run_analysis(
     )
     if market_data.payload.provider == "yahoo":
         artifacts.append("acquired_adjusted_prices.csv")
-        persist_acquisition(prices, output_dir / "acquired_adjusted_prices.csv")
+        persist_acquisition(
+            market_data.canonical_records,
+            output_dir / "acquired_adjusted_prices.csv",
+        )
     manifest = build_run_manifest(config, market_data, artifacts)
     persist_run_manifest(manifest, output_dir / "run_manifest.json")
 

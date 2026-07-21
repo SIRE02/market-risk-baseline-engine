@@ -2,6 +2,14 @@
 
 A Python pipeline that validates adjusted daily prices from Yahoo Finance or a local CSV and produces return-distribution, volatility, covariance, and Pearson-correlation estimates using explicit statistical conventions.
 
+## Project status and roadmap
+
+Version `0.2.0` completes the installable asset-level quantitative foundation.
+Phase 3 adds the explicit portfolio contract, valuation, cash, and exposure layer
+without introducing VaR, forecasting models, or machine learning. The complete
+scope, phase order, conventions, and exit gates are defined in the
+[`market-risk-baseline-engine.md`](docs/market-risk-baseline-engine.md).
+
 ## What it produces
 
 Running the installed `market-risk-baseline` command creates these files in `outputs/`:
@@ -21,9 +29,9 @@ Running the installed `market-risk-baseline` command creates these files in `out
 - `data_quality_report.json`
 - `run_manifest.json`
 
-Yahoo runs also save `acquired_adjusted_prices.csv` in the canonical CSV schema so it can be selected explicitly in a later offline run. The engine never silently falls back from Yahoo to a local file or cache.
+Yahoo runs also save the normalized, requested, in-range records to `acquired_adjusted_prices.csv` before complete-case alignment. The canonical CSV therefore preserves disclosed missing observations and can be selected explicitly in a later offline run. The engine never silently falls back from Yahoo to a local file or cache.
 
-Every provider passes through the same normalization, date filtering, positive-price validation, and complete-case alignment pipeline. Dates with missing observations in any selected asset are dropped, and prices are never forward-filled.
+Every provider passes through the same normalization, date filtering, positive-price validation, and complete-case alignment pipeline. Dates with missing observations in any selected asset are dropped, and prices are never forward-filled. Until the Phase 3 market-calendar contract exists, a run fails if complete-case alignment would make two retained rows nonconsecutive within the provider's observed-date union; such a price relative must not be mislabeled as a daily return.
 
 ## Setup with Conda
 
@@ -102,13 +110,13 @@ date,ticker,adjusted_close
 
 Adjusted prices are used so stock splits and cash distributions do not appear as ordinary market gains or losses in the return series. Do not put raw closes in `adjusted_close`: the engine cannot infer or reconstruct split/dividend adjustments and deliberately refuses Yahoo responses without `Adj Close`. The exact adjustment remains provider-defined.
 
-Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. In particular, forward-filling would invent a stale price observation, suppress that asset's measured return, and potentially distort cross-asset dependence. A run needs at least `rolling_min_observations + 1` common adjusted-price observations so the price series yields the configured minimum number of returns.
+Duplicate date/ticker rows keep the last source row and are disclosed. Missing, nonnumeric, zero, and negative prices are never filled; invalid observations are removed before complete-case alignment. In particular, forward-filling would invent a stale price observation, suppress that asset's measured return, and potentially distort cross-asset dependence. If an interior missing observation would make the aligned matrix span another provider observation date, the run fails instead of treating the resulting multi-observation price relative as daily. A run needs at least `rolling_min_observations + 1` common adjusted-price observations so the price series yields the configured minimum number of returns.
 
-`outputs/acquired_adjusted_prices.csv` from a successful Yahoo run follows this schema and can be passed later with `--provider csv --csv-path ...`.
+`outputs/acquired_adjusted_prices.csv` from a successful Yahoo run follows this schema and preserves the normalized pre-alignment records. It can be passed later with `--provider csv --csv-path ...`.
 
 ## Data quality and lineage
 
-`data_quality_report.json` records requested and returned instruments, actual first and last common dates, per-instrument observation counts, missing values, duplicate date/instrument rows, invalid prices, and the reduction caused by common-history alignment.
+`data_quality_report.json` records requested and returned instruments, actual first and last common dates, per-instrument observation counts, duplicate date/instrument rows, invalid prices, and the reduction caused by common-history alignment. `missing_adjusted_close_values` is scoped to requested, in-range, deduplicated records; `source_missing_adjusted_close_values` separately records missing values in the provider-normalized source before scope filters.
 
 `run_manifest.json` records the package version, Git commit when available, execution timestamp, complete effective configuration, actual provider and source, acquisition/read time, actual input range, instruments, dependency versions, generated artifacts, and machine-readable estimation conventions. A CSV run records the resolved source path and file modification time. These files describe the data actually analyzed, not merely what was requested.
 
@@ -157,15 +165,22 @@ python -m build
 
 No standard-deviation or covariance output uses a population estimator (`ddof=0`). Downside deviation deliberately uses all non-missing observations in its denominator, not only observations below the target. `observations_per_year` defaults to 252 and is configurable; it affects volatility annualization only. Square-root-of-time annualization is a baseline approximation, not a universal law.
 
+Because every return summary includes both skewness and excess kurtosis, the summary fails explicitly unless every instrument has at least four non-missing log-return observations; it never emits silent insufficient-sample `NaN` values for those fields. The run manifest records this combined-summary minimum separately from the mathematically correct per-estimator minima of three observations for skewness and four for excess kurtosis.
+
 Rolling windows are backward-looking, include the current observation, and never use future rows. `rolling_min_observations` defaults to `rolling_window`, which leaves the first `window - 1` estimates as `NaN`. If the configured minimum is smaller than the window, estimates begin at that minimum using an incomplete trailing window. At least two observations are required, the minimum cannot exceed the window, and a sample shorter than the minimum fails explicitly.
 
-Cross-asset covariance and correlation use complete-case alignment: a date is retained only when every selected asset has a valid price (and therefore a valid return after transformation). This provides one consistent sample for every pair, but it can shorten the history and create selection effects when missingness is systematic; the quality report discloses the reduction. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. The quantile probabilities and method, skewness and kurtosis bias conventions, and complete downside-deviation definition are repeated in every `run_manifest.json`. Correlation describes linear comovement, does not establish causation, and can change across sample periods. All return-distribution and dependence outputs are historical sample descriptions rather than forecasts.
+Cross-asset covariance and correlation use complete-case alignment: a date is retained only when every selected asset has a valid price. Retained rows must also be consecutive within the union of provider observation dates, preventing an interior missing observation from creating a multi-observation return labeled daily. This provides one consistent sample for every pair, but it can shorten the history and create selection effects when missingness is systematic; the quality report discloses the reduction. Rolling covariance and correlation CSVs use `(date, ticker)` row keys and one column per paired ticker. The quantile probabilities and method, skewness and kurtosis bias conventions, and complete downside-deviation definition are repeated in every `run_manifest.json`. Correlation describes linear comovement, does not establish causation, and can change across sample periods. All return-distribution and dependence outputs are historical sample descriptions rather than forecasts.
 
 ## Error handling
 
-The program reports invalid configuration, date ranges, output/source paths, rolling windows and minimum observations, annualization settings, quantile probabilities or methods, downside targets, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, insufficient common history, and insufficient return samples with readable messages.
+The program reports invalid configuration, date ranges, output/source paths, rolling windows and minimum observations, annualization settings, quantile probabilities or methods, downside targets, CSV schemas, missing adjusted-price fields, empty provider responses, temporary download failures, invalid tickers, gap-spanning aligned intervals, insufficient common history, and insufficient return samples with readable messages.
 
-Potential future additions include cumulative returns, drawdowns, a small interface, and additional risk metrics. Forecasting, VaR, portfolio optimization, machine learning, live feeds, automated trading, and complex infrastructure remain intentionally out of scope for version one.
+The next releases extend the baseline into explicit portfolio valuation,
+historical portfolio P&L, simple-return covariance aggregation, transparent
+historical and normal VaR/Expected Shortfall, deterministic stress testing, and
+baseline risk-model validation. Conditional forecasting models, expected-return
+or price prediction, portfolio optimization, machine learning, deep learning,
+live feeds, and automated trading remain outside this repository.
 
 ## License
 

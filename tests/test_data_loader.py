@@ -31,7 +31,7 @@ def test_extract_adjusted_close_never_falls_back_to_raw_close() -> None:
         _extract_adjusted_close(raw, ["SPY"])
 
 
-def test_clean_prices_sorts_deduplicates_converts_and_drops_missing_dates() -> None:
+def test_clean_prices_sorts_deduplicates_and_converts_values() -> None:
     dates = pd.to_datetime(
         [
             "2024-01-05",
@@ -45,7 +45,7 @@ def test_clean_prices_sorts_deduplicates_converts_and_drops_missing_dates() -> N
     raw = pd.DataFrame(
         {
             "AAA": ["103", "100", "101", "102", "104", "105"],
-            "BBB": ["53", "50", "51", None, "54", "55"],
+            "BBB": ["53", "50", "51", "52", "54", "55"],
         },
         index=dates,
     )
@@ -54,7 +54,20 @@ def test_clean_prices_sorts_deduplicates_converts_and_drops_missing_dates() -> N
     assert cleaned.index.is_unique
     assert not cleaned.isna().any(axis=None)
     assert cleaned.loc[pd.Timestamp("2024-01-03"), "AAA"] == 101
-    assert pd.Timestamp("2024-01-04") not in cleaned.index
+
+
+def test_clean_prices_rejects_gap_spanning_daily_returns() -> None:
+    dates = pd.date_range("2024-01-02", periods=6, freq="B")
+    prices = pd.DataFrame(
+        {
+            "AAA": [100, 101, 102, 103, 104, 105],
+            "BBB": [50, 51, None, 53, 54, 55],
+        },
+        index=dates,
+    )
+
+    with pytest.raises(MarketDataError, match="gap-spanning returns"):
+        clean_adjusted_prices(prices, ["AAA", "BBB"], rolling_window=2)
 
 
 def test_clean_prices_reports_invalid_ticker_and_insufficient_history() -> None:

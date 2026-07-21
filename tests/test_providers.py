@@ -84,7 +84,7 @@ def test_quality_report_counts_duplicates_invalid_prices_and_alignment() -> None
             pd.DataFrame(
                 [
                     {"date": "2024-01-02", "ticker": "AAA", "adjusted_close": 100.5},
-                    {"date": "2024-01-04", "ticker": "BBB", "adjusted_close": -1},
+                    {"date": "2024-01-08", "ticker": "BBB", "adjusted_close": -1},
                 ]
             ),
         ],
@@ -102,6 +102,41 @@ def test_quality_report_counts_duplicates_invalid_prices_and_alignment() -> None
     assert quality["invalid_price_values_removed"] == 1
     assert quality["common_history_rows_removed"] == 1
     assert len(prices) == 4
+
+
+def test_quality_missing_count_is_scoped_to_requested_in_range_rows() -> None:
+    records = pd.concat(
+        [
+            _canonical(_prices()),
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2024-01-03",
+                        "ticker": "ZZZ",
+                        "adjusted_close": 1.0,
+                    },
+                    {
+                        "date": "2023-12-01",
+                        "ticker": "AAA",
+                        "adjusted_close": 1.0,
+                    },
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    records.loc[records.index[-2:], "adjusted_close"] = None
+    config = AnalysisConfig(
+        tickers=("AAA", "BBB"),
+        start_date="2024-01-01",
+        end_date="2024-02-01",
+        rolling_window=2,
+    )
+
+    _prices_result, _normalized, quality = normalize_and_validate(records, config)
+
+    assert quality["source_missing_adjusted_close_values"] == 2
+    assert quality["missing_adjusted_close_values"] == 0
 
 
 def test_csv_schema_is_strict_and_yahoo_errors_do_not_fallback(tmp_path: Path) -> None:
@@ -144,6 +179,28 @@ def test_persisted_yahoo_acquisition_is_reusable_as_csv(tmp_path: Path) -> None:
     pd.testing.assert_frame_equal(
         reloaded, prices.rename_axis("date"), check_freq=False
     )
+
+
+def test_persisted_acquisition_retains_pre_alignment_missing_rows(
+    tmp_path: Path,
+) -> None:
+    records = _canonical(_prices())
+    missing_date = pd.Timestamp("2024-01-08")
+    records.loc[
+        (records["date"] == missing_date) & (records["ticker"] == "BBB"),
+        "adjusted_close",
+    ] = None
+    csv_path = tmp_path / "acquired_adjusted_prices.csv"
+
+    persist_acquisition(records, csv_path)
+
+    persisted = pd.read_csv(csv_path, parse_dates=["date"])
+    retained = persisted.loc[
+        (persisted["date"] == missing_date) & (persisted["ticker"] == "BBB"),
+        "adjusted_close",
+    ]
+    assert len(retained) == 1
+    assert retained.isna().all()
 
 
 def test_configured_rolling_minimum_controls_the_history_gate() -> None:

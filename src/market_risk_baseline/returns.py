@@ -9,6 +9,7 @@ from market_risk_baseline.estimation import (
     DEFAULT_DOWNSIDE_TARGET,
     DEFAULT_QUANTILE_METHOD,
     DEFAULT_QUANTILES,
+    MINIMUM_RETURN_SUMMARY_OBSERVATIONS,
     validate_finite_number,
     validate_quantile_method,
     validate_quantiles,
@@ -19,9 +20,7 @@ def _validate_prices(prices: pd.DataFrame) -> None:
     if prices.empty:
         raise ValueError("The price matrix is empty.")
     if (prices <= 0).any(axis=None):
-        raise ValueError(
-            "All adjusted prices must be positive to calculate log returns."
-        )
+        raise ValueError("All adjusted prices must be strictly positive.")
 
 
 def calculate_simple_returns(prices: pd.DataFrame) -> pd.DataFrame:
@@ -57,6 +56,20 @@ def summarize_returns(
     """Describe daily log returns using explicit empirical estimators."""
     if log_returns.empty:
         raise ValueError("Log returns are required for distribution statistics.")
+    observation_counts = log_returns.count()
+    insufficient = observation_counts.loc[
+        observation_counts < MINIMUM_RETURN_SUMMARY_OBSERVATIONS
+    ]
+    if not insufficient.empty:
+        details = ", ".join(
+            f"{instrument} ({int(count)})" for instrument, count in insufficient.items()
+        )
+        raise ValueError(
+            f"At least {MINIMUM_RETURN_SUMMARY_OBSERVATIONS} non-missing log-return "
+            "observations per instrument are required for bias-corrected skewness "
+            "and excess kurtosis; received "
+            f"{details}."
+        )
     probabilities = validate_quantiles(quantiles)
     method = validate_quantile_method(quantile_method)
     target = validate_finite_number(downside_target, "DOWNSIDE_TARGET")
