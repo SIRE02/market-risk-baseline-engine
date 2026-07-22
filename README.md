@@ -4,7 +4,7 @@ A Python pipeline that validates adjusted daily prices from Yahoo Finance or a l
 
 ## Project status and roadmap
 
-Version `0.2.0` completes the installable asset-level quantitative foundation.
+Version `0.2.1` completes the installable asset-level quantitative foundation.
 Phase 3 adds the explicit portfolio contract, valuation, cash, and exposure layer
 without introducing VaR, forecasting models, or machine learning. The complete
 scope, phase order, conventions, and exit gates are defined in the
@@ -52,7 +52,7 @@ python -m pip install -e .
 
 ## Configure and run
 
-Version `0.2.0` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
+Version `0.2.1` accepts a TOML or JSON configuration file. Copy `config.example.toml`, edit it without changing application source, and run:
 
 ```powershell
 conda run -n market-risk-baseline-engine market-risk-baseline --config config.example.toml
